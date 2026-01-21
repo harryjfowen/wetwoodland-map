@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Wet Woodland Distribution in England</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <script src="https://unpkg.com/deck.gl@latest/dist.min.js"></script>
+    <script src="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.js"></script>
+    <link href="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css" rel="stylesheet">
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        #map {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 100%;
+        }
+        #info {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            max-width: 350px;
+            font-size: 14px;
+            z-index: 1;
+        }
+        #info h2 {
+            margin: 0 0 10px 0;
+            font-size: 18px;
+            color: #4CAF50;
+        }
+        #info p {
+            margin: 5px 0;
+            line-height: 1.5;
+        }
+        #legend {
+            position: absolute;
+            bottom: 30px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            font-size: 12px;
+            z-index: 1;
+        }
+        #legend h3 {
+            margin: 0 0 10px 0;
+            font-size: 14px;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin: 5px 0;
+        }
+        .legend-color {
+            width: 30px;
+            height: 15px;
+            margin-right: 10px;
+            border-radius: 2px;
+        }
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.9);
+            color: white;
+            padding: 30px 40px;
+            border-radius: 8px;
+            font-size: 16px;
+            z-index: 2;
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    <div id="loading">Loading wet woodland data...</div>
+    <div id="info">
+        <h2>🌲 Wet Woodland Distribution</h2>
+        <p>3D hexagon visualization showing wet woodland density across England</p>
+        <p><strong>Height:</strong> Number of wet woodland pixels per hexagon</p>
+        <p><strong>Color:</strong> Green gradient by density</p>
+        <p><strong>Controls:</strong> Drag to rotate, scroll to zoom, right-click drag to pan</p>
+    </div>
+    <div id="legend">
+        <h3>Wet Woodland Density</h3>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #1a4d1a;"></div>
+            <span>Low</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #2d7a2d;"></div>
+            <span>Medium</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #4CAF50;"></div>
+            <span>High</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #81c784;"></div>
+            <span>Very High</span>
+        </div>
+    </div>
+
+    <script>
+        // Mapbox access token
+        const MAPBOX_ACCESS_TOKEN = 'pk.eyJ1IjoiaGFycnlqZm93ZW4iLCJhIjoiY21rbnlyeXhhMDB1ajNicjJtaXE3eDdvbCJ9.vdrJo3eKg0LpM2s_aYB8Nw';
+
+        // Initial view state (centered on England)
+        const INITIAL_VIEW_STATE = {
+            latitude: 52.5,
+            longitude: -1.5,
+            zoom: 6,
+            pitch: 45,
+            bearing: 0
+        };
+
+        // Load data and create visualization
+        fetch('wet_woodland_hexagons.geojson')
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('loading').style.display = 'none';
+
+                // Calculate statistics for color scale
+                const counts = data.features.map(f => f.properties.count);
+                const maxCount = Math.max(...counts);
+                const minCount = Math.min(...counts);
+
+                console.log(`Loaded ${data.features.length} hexagons`);
+                console.log(`Count range: ${minCount} - ${maxCount}`);
+
+                // Create deck.gl layer
+                const hexagonLayer = new deck.GeoJsonLayer({
+                    id: 'wet-woodland-hexagons',
+                    data: data,
+                    opacity: 0.8,
+                    stroked: true,
+                    filled: true,
+                    extruded: true,
+                    wireframe: true,
+                    lineWidthMinPixels: 1,
+
+                    // Extrusion height based on count
+                    getElevation: f => f.properties.count * 5, // Scale factor for visibility
+
+                    // Color based on count (green gradient)
+                    getFillColor: f => {
+                        const count = f.properties.count;
+                        const normalized = (count - minCount) / (maxCount - minCount);
+
+                        // Green gradient from dark to bright
+                        const r = Math.floor(26 + normalized * 103);
+                        const g = Math.floor(77 + normalized * 118);
+                        const b = Math.floor(26 + normalized * 106);
+                        const a = 200;
+
+                        return [r, g, b, a];
+                    },
+
+                    getLineColor: [255, 255, 255, 50],
+
+                    // Tooltip
+                    pickable: true,
+                    autoHighlight: true,
+                    highlightColor: [255, 255, 255, 100]
+                });
+
+                // Create deck.gl instance
+                const deckgl = new deck.DeckGL({
+                    container: 'map',
+                    mapboxApiAccessToken: MAPBOX_ACCESS_TOKEN,
+                    mapStyle: 'mapbox://styles/mapbox/dark-v10',
+                    initialViewState: INITIAL_VIEW_STATE,
+                    controller: true,
+                    layers: [hexagonLayer],
+
+                    // Tooltip
+                    getTooltip: ({object}) => {
+                        if (!object) return null;
+                        return {
+                            html: `
+                                <div style="background: rgba(0,0,0,0.9); padding: 10px; border-radius: 5px;">
+                                    <strong>Wet Woodland Pixels:</strong> ${object.properties.count.toLocaleString()}<br>
+                                    <strong>H3 Index:</strong> ${object.properties.h3_index}
+                                </div>
+                            `,
+                            style: {
+                                fontSize: '12px',
+                                color: 'white'
+                            }
+                        };
+                    }
+                });
+            })
+            .catch(error => {
+                console.error('Error loading data:', error);
+                document.getElementById('loading').innerHTML =
+                    '❌ Error loading data. Please check console for details.';
+            });
+    </script>
+</body>
+</html>
