@@ -87,25 +87,25 @@
         <h2>🌲 Wet Woodland Distribution</h2>
         <p>3D hexagon visualization showing wet woodland density across England</p>
         <p><strong>Height:</strong> Number of wet woodland pixels per hexagon</p>
-        <p><strong>Color:</strong> Green gradient by density</p>
+        <p><strong>Color:</strong> Blue → Yellow → Red heat map by density</p>
         <p><strong>Controls:</strong> Drag to rotate, scroll to zoom, right-click drag to pan</p>
     </div>
     <div id="legend">
         <h3>Wet Woodland Density</h3>
         <div class="legend-item">
-            <div class="legend-color" style="background: #1a4d1a;"></div>
+            <div class="legend-color" style="background: #0064ff;"></div>
             <span>Low</span>
         </div>
         <div class="legend-item">
-            <div class="legend-color" style="background: #2d7a2d;"></div>
-            <span>Medium</span>
+            <div class="legend-color" style="background: #00ffff;"></div>
+            <span>Medium-Low</span>
         </div>
         <div class="legend-item">
-            <div class="legend-color" style="background: #4CAF50;"></div>
-            <span>High</span>
+            <div class="legend-color" style="background: #ffff00;"></div>
+            <span>Medium-High</span>
         </div>
         <div class="legend-item">
-            <div class="legend-color" style="background: #81c784;"></div>
+            <div class="legend-color" style="background: #ff0000;"></div>
             <span>Very High</span>
         </div>
     </div>
@@ -155,17 +155,28 @@
                         return Math.pow(count, 1.5) * 50;
                     },
 
-                    // Color based on count (green gradient)
+                    // Color based on count (blue → yellow → red heat map)
                     getFillColor: f => {
                         const count = f.properties.count;
                         const normalized = (count - minCount) / (maxCount - minCount);
 
-                        // Green gradient from dark to bright
-                        const r = Math.floor(26 + normalized * 103);
-                        const g = Math.floor(77 + normalized * 118);
-                        const b = Math.floor(26 + normalized * 106);
-                        const a = 200;
+                        let r, g, b;
 
+                        if (normalized < 0.5) {
+                            // Blue to Yellow (first half)
+                            const t = normalized * 2; // 0 to 1
+                            r = Math.floor(0 + t * 255);      // 0 → 255
+                            g = Math.floor(100 + t * 155);    // 100 → 255
+                            b = Math.floor(255 - t * 255);    // 255 → 0
+                        } else {
+                            // Yellow to Red (second half)
+                            const t = (normalized - 0.5) * 2; // 0 to 1
+                            r = 255;                          // stays 255
+                            g = Math.floor(255 - t * 255);    // 255 → 0
+                            b = 0;                            // stays 0
+                        }
+
+                        const a = 200;
                         return [r, g, b, a];
                     },
 
