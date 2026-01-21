@@ -267,7 +267,7 @@
                 // Create deck.gl instance with enhanced effects
                 let deckgl = new deck.DeckGL({
                     container: 'map',
-                    map: maplibregl.Map,
+                    mapLib: maplibregl,
                     mapStyle: 'https://basemaps.cartocdn.com/gl/dark-matter-nolabels-gl-style/style.json',
                     initialViewState: INITIAL_VIEW_STATE,
                     controller: true,
