@@ -5,8 +5,8 @@
     <title>Wet Woodland Distribution in England</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <script src="https://unpkg.com/deck.gl@latest/dist.min.js"></script>
-    <script src="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.js"></script>
-    <link href="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css" rel="stylesheet">
+    <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
+    <link href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css" rel="stylesheet">
     <style>
         body {
             margin: 0;
@@ -172,9 +172,6 @@
     </div>
 
     <script>
-        // Mapbox access token
-        const MAPBOX_ACCESS_TOKEN = 'pk.eyJ1IjoiaGFycnlqZm93ZW4iLCJhIjoiY21rbnlyeXhhMDB1ajNicjJtaXE3eDdvbCJ9.vdrJo3eKg0LpM2s_aYB8Nw';
-
         // Initial view state (centered on England)
         const INITIAL_VIEW_STATE = {
             latitude: 52.5,
@@ -270,8 +267,8 @@
                 // Create deck.gl instance with enhanced effects
                 let deckgl = new deck.DeckGL({
                     container: 'map',
-                    mapboxApiAccessToken: MAPBOX_ACCESS_TOKEN,
-                    mapStyle: 'mapbox://styles/mapbox/dark-v10',
+                    map: maplibregl.Map,
+                    mapStyle: 'https://basemaps.cartocdn.com/gl/dark-matter-nolabels-gl-style/style.json',
                     initialViewState: INITIAL_VIEW_STATE,
                     controller: true,
                     layers: [createHexagonLayer()],
