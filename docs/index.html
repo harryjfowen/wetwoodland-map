@@ -123,9 +123,9 @@
         <div class="control-group">
             <label>
                 <span>Height Exaggeration</span>
-                <span class="slider-value" id="height-value">2.0x</span>
+                <span class="slider-value" id="height-value">1.0x</span>
             </label>
-            <input type="range" id="height-slider" min="10" max="100" value="20" step="5">
+            <input type="range" id="height-slider" min="10" max="25" value="15" step="1">
         </div>
         <div class="control-group">
             <label>
@@ -181,8 +181,8 @@
             bearing: 0
         };
 
-        // Control state
-        let heightMultiplier = 2.0;  // Start at 2x for better visibility
+        // Control state (now controls exponent, not multiplier)
+        let heightExponent = 1.0;  // Power law exponent (1.0 = linear, 2.5 = very dramatic)
         let layerOpacity = 0.9;
 
         // Load data and create visualization
@@ -218,11 +218,11 @@
                         specularColor: [60, 60, 60]
                     },
 
-                    // Extrusion height based on count (with power scaling and multiplier)
+                    // Extrusion height based on count (with adjustable power scaling)
                     getElevation: f => {
                         const count = f.properties.count;
-                        // Power scaling with adjustable multiplier
-                        return Math.pow(count, 1.5) * 50 * heightMultiplier;
+                        // Power scaling with adjustable exponent (1.0 = linear, 2.5 = very dramatic)
+                        return Math.pow(count, heightExponent) * 50;
                     },
 
                     // Color based on count (deck.gl 3d-heatmap color scheme)
@@ -325,12 +325,12 @@
                     });
                 };
 
-                // Height slider event handler
+                // Height slider event handler (controls power law exponent)
                 const heightSlider = document.getElementById('height-slider');
                 const heightValue = document.getElementById('height-value');
                 heightSlider.addEventListener('input', (e) => {
-                    heightMultiplier = parseFloat(e.target.value) / 10;
-                    heightValue.textContent = heightMultiplier.toFixed(1) + 'x';
+                    heightExponent = parseFloat(e.target.value) / 10;
+                    heightValue.textContent = heightExponent.toFixed(1) + 'x';
                     updateVisualization();
                 });
 
