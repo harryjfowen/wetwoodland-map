@@ -148,8 +148,12 @@
                     wireframe: true,
                     lineWidthMinPixels: 1,
 
-                    // Extrusion height based on count
-                    getElevation: f => f.properties.count * 5, // Scale factor for visibility
+                    // Extrusion height based on count (with power scaling for drama)
+                    getElevation: f => {
+                        const count = f.properties.count;
+                        // Power scaling: makes high values much taller
+                        return Math.pow(count, 1.5) * 50;
+                    },
 
                     // Color based on count (green gradient)
                     getFillColor: f => {
