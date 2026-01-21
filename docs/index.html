@@ -44,27 +44,40 @@
             position: absolute;
             bottom: 30px;
             right: 20px;
-            background: rgba(0, 0, 0, 0.8);
-            color: white;
-            padding: 15px;
-            border-radius: 8px;
+            background: white;
+            color: #333;
+            padding: 15px 20px;
+            border-radius: 4px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
             font-size: 12px;
             z-index: 1;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         }
         #legend h3 {
-            margin: 0 0 10px 0;
-            font-size: 14px;
+            margin: 0 0 12px 0;
+            font-size: 13px;
+            font-weight: 600;
+            color: #000;
         }
-        .legend-item {
-            display: flex;
-            align-items: center;
-            margin: 5px 0;
-        }
-        .legend-color {
-            width: 30px;
-            height: 15px;
-            margin-right: 10px;
+        .legend-gradient {
+            width: 200px;
+            height: 20px;
+            background: linear-gradient(to right,
+                rgb(1, 152, 189),
+                rgb(73, 227, 206),
+                rgb(216, 254, 181),
+                rgb(254, 237, 177),
+                rgb(254, 173, 84),
+                rgb(209, 55, 78)
+            );
             border-radius: 2px;
+            margin-bottom: 8px;
+        }
+        .legend-labels {
+            display: flex;
+            justify-content: space-between;
+            font-size: 11px;
+            color: #666;
         }
         #loading {
             position: absolute;
@@ -145,29 +158,10 @@
     </div>
     <div id="legend">
         <h3>Wet Woodland Density</h3>
-        <div class="legend-item">
-            <div class="legend-color" style="background: rgb(1, 152, 189);"></div>
-            <span>Very Low</span>
-        </div>
-        <div class="legend-item">
-            <div class="legend-color" style="background: rgb(73, 227, 206);"></div>
+        <div class="legend-gradient"></div>
+        <div class="legend-labels">
             <span>Low</span>
-        </div>
-        <div class="legend-item">
-            <div class="legend-color" style="background: rgb(216, 254, 181);"></div>
-            <span>Medium</span>
-        </div>
-        <div class="legend-item">
-            <div class="legend-color" style="background: rgb(254, 237, 177);"></div>
-            <span>Medium-High</span>
-        </div>
-        <div class="legend-item">
-            <div class="legend-color" style="background: rgb(254, 173, 84);"></div>
             <span>High</span>
-        </div>
-        <div class="legend-item">
-            <div class="legend-color" style="background: rgb(209, 55, 78);"></div>
-            <span>Very High</span>
         </div>
     </div>
 
