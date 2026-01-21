@@ -123,9 +123,9 @@
         <div class="control-group">
             <label>
                 <span>Height Exaggeration</span>
-                <span class="slider-value" id="height-value">3.0x</span>
+                <span class="slider-value" id="height-value">2.0x</span>
             </label>
-            <input type="range" id="height-slider" min="10" max="100" value="30" step="5">
+            <input type="range" id="height-slider" min="10" max="100" value="20" step="5">
         </div>
         <div class="control-group">
             <label>
@@ -182,7 +182,7 @@
         };
 
         // Control state
-        let heightMultiplier = 3.0;  // Start at 3x for better visibility
+        let heightMultiplier = 2.0;  // Start at 2x for better visibility
         let layerOpacity = 0.9;
 
         // Load data and create visualization
@@ -201,7 +201,7 @@
 
                 // Function to create/update the hexagon layer
                 const createHexagonLayer = () => new deck.GeoJsonLayer({
-                    id: 'wet-woodland-hexagons',
+                    id: `wet-woodland-hexagons-${Date.now()}`,
                     data: data,
                     opacity: layerOpacity,
                     stroked: true,
