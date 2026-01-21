@@ -78,11 +78,64 @@
             font-size: 16px;
             z-index: 2;
         }
+        #controls {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            width: 250px;
+            font-size: 14px;
+            z-index: 1;
+        }
+        #controls h3 {
+            margin: 0 0 15px 0;
+            font-size: 16px;
+            color: #4CAF50;
+        }
+        .control-group {
+            margin-bottom: 20px;
+        }
+        .control-group label {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-size: 13px;
+        }
+        .control-group input[type="range"] {
+            width: 100%;
+            cursor: pointer;
+        }
+        .slider-value {
+            color: #4CAF50;
+            font-weight: bold;
+        }
     </style>
 </head>
 <body>
     <div id="map"></div>
     <div id="loading">Loading wet woodland data...</div>
+
+    <div id="controls">
+        <h3>⚙️ Controls</h3>
+        <div class="control-group">
+            <label>
+                <span>Height Exaggeration</span>
+                <span class="slider-value" id="height-value">1.0x</span>
+            </label>
+            <input type="range" id="height-slider" min="10" max="100" value="10" step="5">
+        </div>
+        <div class="control-group">
+            <label>
+                <span>Opacity</span>
+                <span class="slider-value" id="opacity-value">0.9</span>
+            </label>
+            <input type="range" id="opacity-slider" min="50" max="100" value="90" step="5">
+        </div>
+    </div>
+
     <div id="info">
         <h2>🌲 Wet Woodland Distribution</h2>
         <p>3D hexagon visualization showing wet woodland density across England</p>
@@ -131,6 +184,10 @@
             bearing: 0
         };
 
+        // Control state
+        let heightMultiplier = 1.0;
+        let layerOpacity = 0.9;
+
         // Load data and create visualization
         fetch('wet_woodland_hexagons.geojson')
             .then(response => response.json())
@@ -145,11 +202,11 @@
                 console.log(`Loaded ${data.features.length} hexagons`);
                 console.log(`Count range: ${minCount} - ${maxCount}`);
 
-                // Create deck.gl layer with enhanced materials
-                const hexagonLayer = new deck.GeoJsonLayer({
+                // Function to create/update the hexagon layer
+                const createHexagonLayer = () => new deck.GeoJsonLayer({
                     id: 'wet-woodland-hexagons',
                     data: data,
-                    opacity: 0.9,
+                    opacity: layerOpacity,
                     stroked: true,
                     filled: true,
                     extruded: true,
@@ -164,11 +221,11 @@
                         specularColor: [60, 60, 60]
                     },
 
-                    // Extrusion height based on count (with power scaling for drama)
+                    // Extrusion height based on count (with power scaling and multiplier)
                     getElevation: f => {
                         const count = f.properties.count;
-                        // Power scaling: makes high values much taller
-                        return Math.pow(count, 1.5) * 50;
+                        // Power scaling with adjustable multiplier
+                        return Math.pow(count, 1.5) * 50 * heightMultiplier;
                     },
 
                     // Color based on count (deck.gl 3d-heatmap color scheme)
@@ -211,13 +268,13 @@
                 });
 
                 // Create deck.gl instance with enhanced effects
-                const deckgl = new deck.DeckGL({
+                let deckgl = new deck.DeckGL({
                     container: 'map',
                     mapboxApiAccessToken: MAPBOX_ACCESS_TOKEN,
                     mapStyle: 'mapbox://styles/mapbox/dark-v10',
                     initialViewState: INITIAL_VIEW_STATE,
                     controller: true,
-                    layers: [hexagonLayer],
+                    layers: [createHexagonLayer()],
 
                     // Enhanced lighting for better 3D appearance
                     effects: [
@@ -262,6 +319,31 @@
                             }
                         };
                     }
+                });
+
+                // Update function for controls
+                const updateVisualization = () => {
+                    deckgl.setProps({
+                        layers: [createHexagonLayer()]
+                    });
+                };
+
+                // Height slider event handler
+                const heightSlider = document.getElementById('height-slider');
+                const heightValue = document.getElementById('height-value');
+                heightSlider.addEventListener('input', (e) => {
+                    heightMultiplier = parseFloat(e.target.value) / 10;
+                    heightValue.textContent = heightMultiplier.toFixed(1) + 'x';
+                    updateVisualization();
+                });
+
+                // Opacity slider event handler
+                const opacitySlider = document.getElementById('opacity-slider');
+                const opacityValue = document.getElementById('opacity-value');
+                opacitySlider.addEventListener('input', (e) => {
+                    layerOpacity = parseFloat(e.target.value) / 100;
+                    opacityValue.textContent = layerOpacity.toFixed(2);
+                    updateVisualization();
                 });
             })
             .catch(error => {
