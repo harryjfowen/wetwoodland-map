@@ -1,6 +1,6 @@
 # Wet Woodland 3D Hexagon Visualization
 
-Interactive 3D visualization of wet woodland distribution across England using deck.gl and Mapbox.
+Interactive 3D visualization of wet woodland distribution across England using deck.gl and MapLibre.
 
 🌐 **Live Demo:** https://harryjfowen.github.io/wetwoodland-map/
 
@@ -75,19 +75,23 @@ wetwoodland-map/
 
 ## Features
 
-- 🗺️ Mapbox dark base layer for contrast
+- 🗺️ CartoDB Dark Matter base layer (via MapLibre - no API key required!)
 - 📦 3D hexagonal binning for spatial aggregation
-- 🎨 Dynamic color gradient based on density
-- 🖱️ Interactive controls:
+- 🎨 Dynamic 6-color gradient (cyan → turquoise → yellow → orange → red)
+- ⚙️ Interactive controls:
+  - Height exaggeration slider (1x to 10x)
+  - Opacity slider (0.5 to 1.0)
   - Drag to rotate view
   - Scroll to zoom
   - Right-click drag to pan
   - Hover for hexagon details
+- 💡 Professional lighting and material effects
 
 ## Technology Stack
 
 - [deck.gl](https://deck.gl/) - WebGL-powered visualization
-- [Mapbox GL JS](https://www.mapbox.com/mapbox-gljs) - Base map tiles
+- [MapLibre GL](https://maplibre.org/) - Open-source base maps (no API token needed)
+- [CartoDB](https://carto.com/basemaps/) - Free dark matter base map style
 - [H3](https://h3geo.org/) - Hexagonal spatial indexing
 - [GDAL/Rasterio](https://rasterio.readthedocs.io/) - Geospatial data processing
 
