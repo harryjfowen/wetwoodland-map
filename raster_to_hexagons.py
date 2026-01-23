@@ -90,8 +90,8 @@ def raster_to_hexagons(raster_path, output_geojson, h3_resolution=7):
         for h3_index, count in tqdm(hexagon_counts.items(), desc="Creating GeoJSON"):
             # Get hexagon boundary
             boundary = h3.cell_to_boundary(h3_index)
-            # H3 returns (lat, lon), GeoJSON needs [lon, lat]
-            coords = [[lon, lat] for lat, lon in boundary]
+            # H3 returns (lat, lon), GeoJSON needs [lon, lat] - round to 5 decimal places
+            coords = [[round(lon, 5), round(lat, 5)] for lat, lon in boundary]
             coords.append(coords[0])  # Close the polygon
 
             feature = {
