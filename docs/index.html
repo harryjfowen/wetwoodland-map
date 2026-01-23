@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <title>Wet Woodland Distribution in England</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <script src="https://unpkg.com/deck.gl@latest/dist.min.js"></script>
+    <script src="https://unpkg.com/deck.gl@8.9.36/dist.min.js"></script>
     <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
     <link href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css" rel="stylesheet">
     <style>
@@ -224,14 +224,11 @@
                 // Function to create/update the hexagon layer
                 const createHexagonLayer = () => {
                     // Filter data based on minimum pixel count
-                    const filteredData = {
-                        ...data,
-                        features: data.features.filter(f => f.properties.count > minPixelCount)
-                    };
+                    const filteredFeatures = data.features.filter(f => f.properties.count > minPixelCount);
 
                     return new deck.GeoJsonLayer({
                         id: `wet-woodland-hexagons-${Date.now()}`,
-                        data: filteredData,
+                        data: {type: 'FeatureCollection', features: filteredFeatures},
                         opacity: layerOpacity,
                         stroked: true,
                         filled: true,
