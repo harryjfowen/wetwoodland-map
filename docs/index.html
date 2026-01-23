@@ -156,6 +156,13 @@
             </label>
             <input type="range" id="opacity-slider" min="10" max="100" value="50" step="5">
         </div>
+        <div class="control-group">
+            <label>
+                <span>Min Pixels</span>
+                <span class="slider-value" id="min-count-value">&gt;1</span>
+            </label>
+            <input type="range" id="min-count-slider" min="1" max="20" value="1" step="1">
+        </div>
     </div>
 
     <div id="info">
@@ -197,6 +204,7 @@
         // Control state (now controls exponent, not multiplier)
         let heightExponent = 1.3;  // Power law exponent (1.0 = linear, 1.5 = dramatic)
         let layerOpacity = 0.5;
+        let minPixelCount = 1;  // Minimum pixel count threshold
 
         // Load data and create visualization
         fetch('wet_woodland_hexagons.geojson')
@@ -213,9 +221,16 @@
                 console.log(`Count range: ${minCount} - ${maxCount}`);
 
                 // Function to create/update the hexagon layer
-                const createHexagonLayer = () => new deck.GeoJsonLayer({
+                const createHexagonLayer = () => {
+                    // Filter data based on minimum pixel count
+                    const filteredData = {
+                        ...data,
+                        features: data.features.filter(f => f.properties.count > minPixelCount)
+                    };
+
+                    return new deck.GeoJsonLayer({
                     id: `wet-woodland-hexagons-${Date.now()}`,
-                    data: data,
+                    data: filteredData,
                     opacity: layerOpacity,
                     stroked: true,
                     filled: true,
@@ -276,6 +291,7 @@
                     autoHighlight: true,
                     highlightColor: [255, 255, 255, 100]
                 });
+                };
 
                 // Create deck.gl instance with enhanced effects
                 let deckgl = new deck.DeckGL({
@@ -353,6 +369,15 @@
                 opacitySlider.addEventListener('input', (e) => {
                     layerOpacity = parseFloat(e.target.value) / 100;
                     opacityValue.textContent = layerOpacity.toFixed(2);
+                    updateVisualization();
+                });
+
+                // Min pixel count slider event handler
+                const minCountSlider = document.getElementById('min-count-slider');
+                const minCountValue = document.getElementById('min-count-value');
+                minCountSlider.addEventListener('input', (e) => {
+                    minPixelCount = parseInt(e.target.value);
+                    minCountValue.textContent = '>' + minPixelCount;
                     updateVisualization();
                 });
             })
