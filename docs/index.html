@@ -215,8 +215,8 @@
 
                 // Calculate statistics for color scale
                 const counts = data.features.map(f => f.properties.count);
-                const maxCount = Math.max(...counts);
-                const minCount = Math.min(...counts);
+                const maxCount = counts.reduce((a, b) => Math.max(a, b), 0);
+                const minCount = counts.reduce((a, b) => Math.min(a, b), Infinity);
 
                 console.log(`Loaded ${data.features.length} hexagons`);
                 console.log(`Count range: ${minCount} - ${maxCount}`);
