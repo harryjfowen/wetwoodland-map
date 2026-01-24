@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <title>Wet Woodland Distribution in England</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <script src="https://unpkg.com/deck.gl@8.9.36/dist.min.js"></script>
+    <script src="https://unpkg.com/deck.gl@latest/dist.min.js"></script>
     <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
     <link href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css" rel="stylesheet">
     <style>
@@ -278,7 +278,7 @@
                 let deckgl = new deck.DeckGL({
                     container: 'map',
                     mapLib: maplibregl,
-                    mapStyle: 'https://tiles.stadiamaps.com/styles/alidade_smooth_dark.json',
+                    mapStyle: 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json',
                     initialViewState: INITIAL_VIEW_STATE,
                     controller: true,
                     layers: [createHexagonLayer()],
