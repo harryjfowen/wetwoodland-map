@@ -168,7 +168,7 @@
                 <span>Max Pixels</span>
                 <span class="slider-value" id="max-count-value">No limit</span>
             </label>
-            <input type="range" id="max-count-slider" min="0" max="1000" value="1000" step="10">
+            <input type="range" id="max-count-slider" min="1" max="100" value="100" step="1">
         </div>
     </div>
 
@@ -372,17 +372,19 @@
                     updateVisualization();
                 });
 
-                // Max pixel count slider event handler
+                // Max pixel count slider event handler - set max from data
                 const maxCountSlider = document.getElementById('max-count-slider');
                 const maxCountValue = document.getElementById('max-count-value');
+                maxCountSlider.max = maxCount;
+                maxCountSlider.value = maxCount;
                 maxCountSlider.addEventListener('input', (e) => {
                     const value = parseInt(e.target.value);
-                    if (value >= 1000) {
+                    if (value >= maxCount) {
                         maxPixelCount = Infinity;
                         maxCountValue.textContent = 'No limit';
                     } else {
                         maxPixelCount = value;
-                        maxCountValue.textContent = '<' + maxPixelCount;
+                        maxCountValue.textContent = '≤' + maxPixelCount;
                     }
                     updateVisualization();
                 });
