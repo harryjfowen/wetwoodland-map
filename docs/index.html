@@ -328,11 +328,13 @@
                     // Tooltip
                     getTooltip: ({object}) => {
                         if (!object) return null;
+                        const count = object.properties.count;
+                        const hectares = (count * 0.01).toFixed(2);
                         return {
                             html: `
                                 <div style="background: rgba(0,0,0,0.9); padding: 10px; border-radius: 5px;">
-                                    <strong>Wet Woodland Pixels:</strong> ${object.properties.count.toLocaleString()}<br>
-                                    <strong>H3 Index:</strong> ${object.properties.h3_index}
+                                    <strong>Wet Woodland:</strong> ${count.toLocaleString()} pixels<br>
+                                    <strong>Area:</strong> ${hectares} ha
                                 </div>
                             `,
                             style: {
