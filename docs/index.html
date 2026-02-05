@@ -199,6 +199,12 @@
             color: #000;
             font-weight: 600;
         }
+        #polygon-popup .polygon-popup-section {
+            margin: 10px 0 4px 0;
+            font-weight: 600;
+            font-size: 13px;
+            color: #000;
+        }
         #polygon-popup .attr-val {
             font-weight: 500;
             text-align: right;
@@ -334,6 +340,7 @@
         // Format polygon popup: selected stats only, bold label on left like density info pane
         function formatPolygonPopup(props) {
             const fmt = (v) => v == null || v === '' ? null : (typeof v === 'number' ? (Number.isInteger(v) ? v.toLocaleString() : v.toFixed(2)) : String(v));
+            const pctFmt = (v) => v != null && v !== '' ? (typeof v === 'number' ? v.toFixed(1) : String(v)) : null;
             const rows = [];
             const ha = props.total_area_ha;
             const regionHa = props.region_area_ha;
@@ -347,8 +354,31 @@
             if (fmt(props.effective_mesh_size_ha)) rows.push({ key: 'Effective mesh size (ha)', val: fmt(props.effective_mesh_size_ha) });
             if (fmt(props.mean_nn_m)) rows.push({ key: 'Mean NN distance (m)', val: fmt(props.mean_nn_m) });
             if (fmt(props.num_patches)) rows.push({ key: 'Number of patches', val: fmt(props.num_patches) });
-            if (fmt(props.largest_patch_ha)) rows.push({ key: 'Largest patch (ha)', val: fmt(props.largest_patch_ha) });
-            if (fmt(props.median_patch_ha)) rows.push({ key: 'Median patch (ha)', val: fmt(props.median_patch_ha) });
+            // Patch distribution (same format as density info pane)
+            const bands = [
+                { key: '≤ 0.01 ha', pct: props.pct_leq_0_01, area: props.area_leq_0_01_ha },
+                { key: '0.01-0.1 ha', pct: props.pct_0_01_0_1, area: props.area_0_01_0_1_ha },
+                { key: '0.1-1 ha', pct: props.pct_0_1_1, area: props.area_0_1_1_ha },
+                { key: '1-5 ha', pct: props.pct_1_5, area: props.area_1_5_ha },
+                { key: '5-10 ha', pct: props.pct_5_10, area: props.area_5_10_ha },
+                { key: '≥ 10 ha', pct: props.pct_gte_10, area: props.area_gte_10_ha }
+            ];
+            const hasPatchData = bands.some(b => (b.pct != null && b.pct !== '') || (b.area != null && b.area !== ''));
+            if (hasPatchData) {
+                rows.push({ section: 'Patch Distribution' });
+                bands.forEach(b => {
+                    const pct = pctFmt(b.pct);
+                    const areaHa = fmt(b.area);
+                    const val = [pct ? pct + '%' : null, areaHa ? areaHa + ' ha' : null].filter(Boolean).join(' — ');
+                    if (val) rows.push({ key: b.key + ':', val });
+                });
+                const med = fmt(props.median_patch_ha);
+                const large = fmt(props.largest_patch_ha);
+                if (med || large) rows.push({ key: 'Median | Largest', val: [med ? med + ' ha' : '', large ? large + ' ha' : ''].filter(Boolean).join(' | ') });
+            } else {
+                if (fmt(props.largest_patch_ha)) rows.push({ key: 'Largest patch (ha)', val: fmt(props.largest_patch_ha) });
+                if (fmt(props.median_patch_ha)) rows.push({ key: 'Median patch (ha)', val: fmt(props.median_patch_ha) });
+            }
             return rows;
         }
 
@@ -358,7 +388,10 @@
             document.getElementById('polygon-popup-title').textContent = title;
             const body = document.getElementById('polygon-popup-body');
             body.innerHTML = formatPolygonPopup(object.properties)
-                .map(r => `<div class="attr-row"><strong class="attr-key">${r.key}</strong><span class="attr-val">${r.val}</span></div>`)
+                .map(r => {
+                    if (r.section) return `<p class="polygon-popup-section">${r.section}</p>`;
+                    return `<div class="attr-row"><strong class="attr-key">${r.key}</strong><span class="attr-val">${r.val}</span></div>`;
+                })
                 .join('');
             document.getElementById('polygon-popup').classList.add('visible');
         }
