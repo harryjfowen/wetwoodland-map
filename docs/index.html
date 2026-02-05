@@ -196,7 +196,8 @@
             gap: 16px;
         }
         #polygon-popup .attr-key {
-            color: #666;
+            color: #000;
+            font-weight: 600;
         }
         #polygon-popup .attr-val {
             font-weight: 500;
@@ -330,34 +331,24 @@
             return [c(0), c(1), c(2), alpha];
         }
 
-        // Format polygon popup: show key attributes, skip nulls
+        // Format polygon popup: selected stats only, bold label on left like density info pane
         function formatPolygonPopup(props) {
+            const fmt = (v) => v == null || v === '' ? null : (typeof v === 'number' ? (Number.isInteger(v) ? v.toLocaleString() : v.toFixed(2)) : String(v));
             const rows = [];
-            const labels = {
-                Name: 'Name',
-                LNRS_ID: 'LNRS ID',
-                Resp_Auth: 'Responsible Authority',
-                Status: 'Status',
-                total_area_ha: 'Total wet woodland (ha)',
-                total_area_km2: 'Total wet woodland (km²)',
-                region_area_ha: 'Region area (ha)',
-                forest_cover_pct: 'Forest cover %',
-                on_peat_ha: 'On peat (ha)',
-                off_peat_ha: 'Off peat (ha)',
-                on_peat_pct: 'On peat %',
-                off_peat_pct: 'Off peat %',
-                effective_mesh_size_ha: 'Effective mesh size (ha)',
-                mean_nn_m: 'Mean NN distance (m)',
-                num_patches: 'Number of patches',
-                largest_patch_ha: 'Largest patch (ha)',
-                median_patch_ha: 'Median patch (ha)'
-            };
-            for (const [key, label] of Object.entries(labels)) {
-                const v = props[key];
-                if (v == null || v === '') continue;
-                let text = typeof v === 'number' ? (Number.isInteger(v) ? v.toLocaleString() : v.toFixed(2)) : String(v);
-                rows.push({ key: label, val: text });
-            }
+            const ha = props.total_area_ha;
+            const regionHa = props.region_area_ha;
+            const pctOfRegion = (ha != null && regionHa != null && regionHa > 0) ? ((ha / regionHa) * 100).toFixed(2) + '%' : null;
+            if (fmt(props.LNRS_ID)) rows.push({ key: 'LNRS ID', val: fmt(props.LNRS_ID) });
+            if (fmt(props.Resp_Auth)) rows.push({ key: 'Responsible Authority', val: fmt(props.Resp_Auth) });
+            if (fmt(ha)) rows.push({ key: 'Total wet woodland (ha)', val: fmt(ha) });
+            if (pctOfRegion) rows.push({ key: 'Wet woodland % of region', val: pctOfRegion });
+            if (fmt(props.forest_cover_pct)) rows.push({ key: 'Forest cover %', val: fmt(props.forest_cover_pct) });
+            if (fmt(props.on_peat_pct)) rows.push({ key: 'On peat %', val: fmt(props.on_peat_pct) });
+            if (fmt(props.effective_mesh_size_ha)) rows.push({ key: 'Effective mesh size (ha)', val: fmt(props.effective_mesh_size_ha) });
+            if (fmt(props.mean_nn_m)) rows.push({ key: 'Mean NN distance (m)', val: fmt(props.mean_nn_m) });
+            if (fmt(props.num_patches)) rows.push({ key: 'Number of patches', val: fmt(props.num_patches) });
+            if (fmt(props.largest_patch_ha)) rows.push({ key: 'Largest patch (ha)', val: fmt(props.largest_patch_ha) });
+            if (fmt(props.median_patch_ha)) rows.push({ key: 'Median patch (ha)', val: fmt(props.median_patch_ha) });
             return rows;
         }
 
@@ -367,7 +358,7 @@
             document.getElementById('polygon-popup-title').textContent = title;
             const body = document.getElementById('polygon-popup-body');
             body.innerHTML = formatPolygonPopup(object.properties)
-                .map(r => `<div class="attr-row"><span class="attr-key">${r.key}</span><span class="attr-val">${r.val}</span></div>`)
+                .map(r => `<div class="attr-row"><strong class="attr-key">${r.key}</strong><span class="attr-val">${r.val}</span></div>`)
                 .join('');
             document.getElementById('polygon-popup').classList.add('visible');
         }
