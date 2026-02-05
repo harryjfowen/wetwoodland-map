@@ -418,7 +418,7 @@
                     stroked: true,
                     filled: true,
                     extruded: false,
-                    getFillColor: f => densityToColor(f.properties.total_area_ha ?? 0, polygonMinDensity, polygonMaxDensity, 26),
+                    getFillColor: f => densityToColor(f.properties.total_area_ha ?? 0, polygonMinDensity, polygonMaxDensity, 64),
                     getLineColor: [0, 0, 0, 255],
                     lineWidthMinPixels: 2,
                     pickable: true,
