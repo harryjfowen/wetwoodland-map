@@ -21,7 +21,7 @@
         }
         #info {
             position: absolute;
-            top: 20px;
+            top: 58px;
             left: 20px;
             background: white;
             color: #333;
@@ -134,11 +134,94 @@
             color: #0066cc;
             font-weight: 600;
         }
+        #view-toggle {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            display: flex;
+            gap: 0;
+            background: white;
+            border-radius: 4px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+            overflow: hidden;
+            z-index: 2;
+            font-size: 13px;
+        }
+        #view-toggle button {
+            padding: 10px 18px;
+            border: none;
+            background: #f0f0f0;
+            color: #333;
+            cursor: pointer;
+            font-weight: 500;
+            font-family: inherit;
+        }
+        #view-toggle button.active {
+            background: #0066cc;
+            color: white;
+        }
+        #view-toggle button:not(.active):hover {
+            background: #e0e0e0;
+        }
+        #polygon-popup {
+            display: none;
+            position: absolute;
+            bottom: 30px;
+            left: 20px;
+            right: 20px;
+            max-width: 400px;
+            max-height: 70vh;
+            overflow: auto;
+            background: white;
+            color: #333;
+            padding: 16px 20px;
+            border-radius: 4px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+            font-size: 12px;
+            z-index: 1;
+        }
+        #polygon-popup.visible {
+            display: block;
+        }
+        #polygon-popup h3 {
+            margin: 0 0 12px 0;
+            font-size: 15px;
+            font-weight: 600;
+            color: #000;
+        }
+        #polygon-popup .attr-row {
+            margin: 4px 0;
+            display: flex;
+            justify-content: space-between;
+            gap: 16px;
+        }
+        #polygon-popup .attr-key {
+            color: #666;
+        }
+        #polygon-popup .attr-val {
+            font-weight: 500;
+            text-align: right;
+        }
+        #polygon-popup .close-popup {
+            margin-top: 12px;
+            padding: 6px 12px;
+            background: #0066cc;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+        }
     </style>
 </head>
 <body>
     <div id="map"></div>
     <div id="loading">Loading wet woodland data...</div>
+
+    <div id="view-toggle">
+        <button type="button" id="btn-hexagons" class="active">Hexagons</button>
+        <button type="button" id="btn-polygons">LNRS Regions</button>
+    </div>
 
     <div id="controls">
         <h3>⚙️ Controls</h3>
@@ -204,6 +287,12 @@
         </div>
     </div>
 
+    <div id="polygon-popup">
+        <h3 id="polygon-popup-title">Region</h3>
+        <div id="polygon-popup-body"></div>
+        <button type="button" class="close-popup" id="close-polygon-popup">Close</button>
+    </div>
+
     <script>
         // Initial view state (centered on England)
         const INITIAL_VIEW_STATE = {
@@ -214,192 +303,228 @@
             bearing: 0
         };
 
-        // Control state (now controls exponent, not multiplier)
-        let heightExponent = 1.3;  // Power law exponent (1.0 = linear, 1.5 = dramatic)
+        // Control state
+        let heightExponent = 1.3;
         let layerOpacity = 0.5;
-        let minPixelCount = 1;  // Minimum pixel count threshold
-        let maxPixelCount = Infinity;  // Maximum pixel count threshold
+        let minPixelCount = 1;
+        let maxPixelCount = Infinity;
+        let viewMode = 'hexagons';  // 'hexagons' | 'polygons'
+        let hexagonData = null;
+        let polygonData = null;
+        let maxCount = 0;
+        let minCount = 0;
+        let deckgl = null;
 
-        // Load data and create visualization
+        // Format polygon popup: show key attributes, skip nulls
+        function formatPolygonPopup(props) {
+            const rows = [];
+            const labels = {
+                Name: 'Name',
+                LNRS_ID: 'LNRS ID',
+                Resp_Auth: 'Responsible Authority',
+                Status: 'Status',
+                total_area_ha: 'Total wet woodland (ha)',
+                total_area_km2: 'Total wet woodland (km²)',
+                region_area_ha: 'Region area (ha)',
+                forest_cover_pct: 'Forest cover %',
+                on_peat_ha: 'On peat (ha)',
+                off_peat_ha: 'Off peat (ha)',
+                on_peat_pct: 'On peat %',
+                off_peat_pct: 'Off peat %',
+                effective_mesh_size_ha: 'Effective mesh size (ha)',
+                mean_nn_m: 'Mean NN distance (m)',
+                num_patches: 'Number of patches',
+                largest_patch_ha: 'Largest patch (ha)',
+                median_patch_ha: 'Median patch (ha)'
+            };
+            for (const [key, label] of Object.entries(labels)) {
+                const v = props[key];
+                if (v == null || v === '') continue;
+                let text = typeof v === 'number' ? (Number.isInteger(v) ? v.toLocaleString() : v.toFixed(2)) : String(v);
+                rows.push({ key: label, val: text });
+            }
+            return rows;
+        }
+
+        function showPolygonPopup(object) {
+            if (!object || !object.properties) return;
+            const title = object.properties.Name || object.properties.LNRS_ID || 'Region';
+            document.getElementById('polygon-popup-title').textContent = title;
+            const body = document.getElementById('polygon-popup-body');
+            body.innerHTML = formatPolygonPopup(object.properties)
+                .map(r => `<div class="attr-row"><span class="attr-key">${r.key}</span><span class="attr-val">${r.val}</span></div>`)
+                .join('');
+            document.getElementById('polygon-popup').classList.add('visible');
+        }
+
+        function hidePolygonPopup() {
+            document.getElementById('polygon-popup').classList.remove('visible');
+        }
+
+        function setViewMode(mode) {
+            viewMode = mode;
+            document.getElementById('btn-hexagons').classList.toggle('active', mode === 'hexagons');
+            document.getElementById('btn-polygons').classList.toggle('active', mode === 'polygons');
+            document.getElementById('controls').style.display = mode === 'hexagons' ? 'block' : 'none';
+            document.getElementById('legend').style.display = mode === 'hexagons' ? 'block' : 'none';
+            document.getElementById('info').style.display = mode === 'hexagons' ? 'block' : 'none';
+            if (mode === 'polygons') hidePolygonPopup();
+            updateLayers();
+        }
+
+        function getLayers() {
+            if (viewMode === 'hexagons' && hexagonData) {
+                const filteredFeatures = hexagonData.features.filter(f =>
+                    f.properties.count > minPixelCount && f.properties.count <= maxPixelCount
+                );
+                return [new deck.GeoJsonLayer({
+                    id: 'wet-woodland-hexagons',
+                    data: { type: 'FeatureCollection', features: filteredFeatures },
+                    opacity: layerOpacity,
+                    stroked: true,
+                    filled: true,
+                    extruded: true,
+                    wireframe: false,
+                    lineWidthMinPixels: 0.5,
+                    material: { ambient: 0.35, diffuse: 0.6, shininess: 32, specularColor: [60, 60, 60] },
+                    getElevation: f => Math.pow(f.properties.count, heightExponent) * 50,
+                    getFillColor: f => {
+                        const count = f.properties.count;
+                        const normalized = (count - minCount) / (maxCount - minCount);
+                        const colorRange = [[1,152,189],[73,227,206],[216,254,181],[254,237,177],[254,173,84],[209,55,78]];
+                        const position = normalized * (colorRange.length - 1);
+                        const i = Math.floor(position);
+                        const j = Math.min(i + 1, colorRange.length - 1);
+                        const t = position - i;
+                        const c = (idx) => Math.floor(colorRange[i][idx] + (colorRange[j][idx] - colorRange[i][idx]) * t);
+                        return [c(0), c(1), c(2), 200];
+                    },
+                    getLineColor: [80, 80, 80, 100],
+                    pickable: true,
+                    autoHighlight: true,
+                    highlightColor: [255, 255, 255, 100]
+                })];
+            }
+            if (viewMode === 'polygons' && polygonData) {
+                return [new deck.GeoJsonLayer({
+                    id: 'wet-woodland-lnrs-regions',
+                    data: polygonData,
+                    stroked: true,
+                    filled: true,
+                    extruded: false,
+                    getFillColor: [1, 152, 189, 140],
+                    getLineColor: [255, 255, 255, 200],
+                    lineWidthMinPixels: 1,
+                    pickable: true,
+                    autoHighlight: true,
+                    highlightColor: [255, 255, 255, 80]
+                })];
+            }
+            return [];
+        }
+
+        function updateLayers() {
+            if (deckgl) deckgl.setProps({ layers: getLayers() });
+        }
+
+        // Load hexagon data first, then init map
         fetch('wet_woodland_hexagons.geojson')
             .then(response => response.json())
             .then(data => {
+                hexagonData = data;
+                const counts = data.features.map(f => f.properties.count);
+                maxCount = counts.reduce((a, b) => Math.max(a, b), 0);
+                minCount = counts.reduce((a, b) => Math.min(a, b), Infinity);
                 document.getElementById('loading').style.display = 'none';
 
-                // Calculate statistics for color scale
-                const counts = data.features.map(f => f.properties.count);
-                const maxCount = counts.reduce((a, b) => Math.max(a, b), 0);
-                const minCount = counts.reduce((a, b) => Math.min(a, b), Infinity);
-
-                console.log(`Loaded ${data.features.length} hexagons`);
-                console.log(`Count range: ${minCount} - ${maxCount}`);
-
-                // Function to create/update the hexagon layer
-                const createHexagonLayer = () => {
-                    // Filter data based on pixel count thresholds
-                    const filteredFeatures = data.features.filter(f =>
-                        f.properties.count > minPixelCount && f.properties.count <= maxPixelCount
-                    );
-
-                    return new deck.GeoJsonLayer({
-                        id: `wet-woodland-hexagons-${Date.now()}`,
-                        data: {type: 'FeatureCollection', features: filteredFeatures},
-                        opacity: layerOpacity,
-                        stroked: true,
-                        filled: true,
-                        extruded: true,
-                        wireframe: false,
-                        lineWidthMinPixels: 0.5,
-                        material: {
-                            ambient: 0.35,
-                            diffuse: 0.6,
-                            shininess: 32,
-                            specularColor: [60, 60, 60]
-                        },
-                        getElevation: f => {
-                            const count = f.properties.count;
-                            return Math.pow(count, heightExponent) * 50;
-                        },
-                        getFillColor: f => {
-                            const count = f.properties.count;
-                            const normalized = (count - minCount) / (maxCount - minCount);
-                            const colorRange = [
-                                [1, 152, 189],
-                                [73, 227, 206],
-                                [216, 254, 181],
-                                [254, 237, 177],
-                                [254, 173, 84],
-                                [209, 55, 78]
-                            ];
-                            const position = normalized * (colorRange.length - 1);
-                            const lowerIndex = Math.floor(position);
-                            const upperIndex = Math.min(lowerIndex + 1, colorRange.length - 1);
-                            const t = position - lowerIndex;
-                            const lowerColor = colorRange[lowerIndex];
-                            const upperColor = colorRange[upperIndex];
-                            const r = Math.floor(lowerColor[0] + (upperColor[0] - lowerColor[0]) * t);
-                            const g = Math.floor(lowerColor[1] + (upperColor[1] - lowerColor[1]) * t);
-                            const b = Math.floor(lowerColor[2] + (upperColor[2] - lowerColor[2]) * t);
-                            return [r, g, b, 200];
-                        },
-                        getLineColor: [80, 80, 80, 100],
-                        pickable: true,
-                        autoHighlight: true,
-                        highlightColor: [255, 255, 255, 100]
-                    });
-                };
-
-                // Create deck.gl instance with enhanced effects
-                let deckgl = new deck.DeckGL({
+                deckgl = new deck.DeckGL({
                     container: 'map',
                     mapLib: maplibregl,
                     mapStyle: 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json',
                     initialViewState: INITIAL_VIEW_STATE,
                     controller: true,
-                    layers: [createHexagonLayer()],
-
-                    // Enhanced lighting for better 3D appearance
+                    layers: getLayers(),
                     effects: [
                         new deck.LightingEffect({
-                            ambient: {
-                                color: [255, 255, 255],
-                                intensity: 1.0
-                            },
+                            ambient: { color: [255, 255, 255], intensity: 1.0 },
                             directional: [
-                                {
-                                    color: [255, 255, 255],
-                                    intensity: 1.0,
-                                    direction: [-3, -9, -1]
-                                },
-                                {
-                                    color: [255, 255, 255],
-                                    intensity: 0.5,
-                                    direction: [1, 3, 8]
-                                }
+                                { color: [255, 255, 255], intensity: 1.0, direction: [-3, -9, -1] },
+                                { color: [255, 255, 255], intensity: 0.5, direction: [1, 3, 8] }
                             ]
                         })
                     ],
-
-                    // Anti-aliasing for smoother edges
-                    parameters: {
-                        clearColor: [0.07, 0.14, 0.19, 1]
-                    },
-
-                    // Tooltip
-                    getTooltip: ({object}) => {
+                    parameters: { clearColor: [0.07, 0.14, 0.19, 1] },
+                    getTooltip: ({ object }) => {
                         if (!object) return null;
-                        const count = object.properties.count;
-                        const hectares = (count * 0.01).toFixed(2);
-                        return {
-                            html: `
-                                <div style="background: rgba(0,0,0,0.9); padding: 10px; border-radius: 5px;">
-                                    <strong>Wet Woodland:</strong> ${count.toLocaleString()} pixels<br>
-                                    <strong>Area:</strong> ${hectares} ha
-                                </div>
-                            `,
-                            style: {
-                                fontSize: '12px',
-                                color: 'white'
-                            }
-                        };
+                        if (viewMode === 'hexagons' && object.properties.count != null) {
+                            const count = object.properties.count;
+                            const hectares = (count * 0.01).toFixed(2);
+                            return { html: `<div style="background: rgba(0,0,0,0.9); padding: 10px; border-radius: 5px;"><strong>Wet Woodland:</strong> ${count.toLocaleString()} pixels<br><strong>Area:</strong> ${hectares} ha</div>`, style: { fontSize: '12px', color: 'white' } };
+                        }
+                        if (viewMode === 'polygons' && object.properties) {
+                            const name = object.properties.Name || object.properties.LNRS_ID || 'Region';
+                            return { html: `<div style="background: rgba(0,0,0,0.9); padding: 10px; border-radius: 5px;"><strong>${name}</strong><br>Click for details</div>`, style: { fontSize: '12px', color: 'white' } };
+                        }
+                        return null;
+                    },
+                    onClick: ({ object }) => {
+                        if (viewMode === 'polygons' && object && object.properties) showPolygonPopup(object);
                     }
                 });
 
-                // Update function for controls
-                const updateVisualization = () => {
-                    deckgl.setProps({
-                        layers: [createHexagonLayer()]
-                    });
-                };
+                const updateVisualization = () => deckgl.setProps({ layers: getLayers() });
 
-                // Height slider event handler (controls power law exponent)
-                const heightSlider = document.getElementById('height-slider');
-                const heightValue = document.getElementById('height-value');
-                heightSlider.addEventListener('input', (e) => {
+                document.getElementById('height-slider').addEventListener('input', (e) => {
                     heightExponent = parseFloat(e.target.value) / 10;
-                    heightValue.textContent = heightExponent.toFixed(1) + 'x';
+                    document.getElementById('height-value').textContent = heightExponent.toFixed(1) + 'x';
                     updateVisualization();
                 });
-
-                // Opacity slider event handler
-                const opacitySlider = document.getElementById('opacity-slider');
-                const opacityValue = document.getElementById('opacity-value');
-                opacitySlider.addEventListener('input', (e) => {
+                document.getElementById('opacity-slider').addEventListener('input', (e) => {
                     layerOpacity = parseFloat(e.target.value) / 100;
-                    opacityValue.textContent = layerOpacity.toFixed(2);
+                    document.getElementById('opacity-value').textContent = layerOpacity.toFixed(2);
                     updateVisualization();
                 });
-
-                // Min pixel count slider event handler
-                const minCountSlider = document.getElementById('min-count-slider');
-                const minCountValue = document.getElementById('min-count-value');
-                minCountSlider.addEventListener('input', (e) => {
+                document.getElementById('min-count-slider').addEventListener('input', (e) => {
                     minPixelCount = parseInt(e.target.value);
-                    minCountValue.textContent = '>' + minPixelCount;
+                    document.getElementById('min-count-value').textContent = '>' + minPixelCount;
                     updateVisualization();
                 });
-
-                // Max pixel count slider event handler - set max from data
                 const maxCountSlider = document.getElementById('max-count-slider');
                 const maxCountValue = document.getElementById('max-count-value');
                 maxCountSlider.max = maxCount;
                 maxCountSlider.value = maxCount;
                 maxCountSlider.addEventListener('input', (e) => {
                     const value = parseInt(e.target.value);
-                    if (value >= maxCount) {
-                        maxPixelCount = Infinity;
-                        maxCountValue.textContent = 'No limit';
-                    } else {
-                        maxPixelCount = value;
-                        maxCountValue.textContent = '≤' + maxPixelCount;
-                    }
+                    maxPixelCount = value >= maxCount ? Infinity : value;
+                    maxCountValue.textContent = maxPixelCount === Infinity ? 'No limit' : '≤' + maxPixelCount;
                     updateVisualization();
                 });
+
+                document.getElementById('btn-hexagons').addEventListener('click', () => setViewMode('hexagons'));
+                document.getElementById('btn-polygons').addEventListener('click', () => {
+                    if (polygonData) {
+                        setViewMode('polygons');
+                    } else {
+                        document.getElementById('loading').style.display = 'block';
+                        document.getElementById('loading').textContent = 'Loading LNRS regions...';
+                        fetch('wet_woodland_lnrs_regions.geojson')
+                            .then(r => r.json())
+                            .then(geo => {
+                                polygonData = geo;
+                                document.getElementById('loading').style.display = 'none';
+                                setViewMode('polygons');
+                            })
+                            .catch(err => {
+                                console.error(err);
+                                document.getElementById('loading').innerHTML = '❌ Error loading regions.';
+                            });
+                    }
+                });
+                document.getElementById('close-polygon-popup').addEventListener('click', hidePolygonPopup);
             })
             .catch(error => {
                 console.error('Error loading data:', error);
-                document.getElementById('loading').innerHTML =
-                    '❌ Error loading data. Please check console for details.';
+                document.getElementById('loading').innerHTML = '❌ Error loading data. Please check console for details.';
             });
     </script>
 </body>
