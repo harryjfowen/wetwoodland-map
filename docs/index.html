@@ -311,9 +311,24 @@
         let viewMode = 'hexagons';  // 'hexagons' | 'polygons'
         let hexagonData = null;
         let polygonData = null;
+        let polygonMinDensity = 0;
+        let polygonMaxDensity = 1;
         let maxCount = 0;
         let minCount = 0;
         let deckgl = null;
+
+        const DENSITY_COLOR_RANGE = [[1,152,189],[73,227,206],[216,254,181],[254,237,177],[254,173,84],[209,55,78]];
+
+        function densityToColor(value, minVal, maxVal) {
+            const range = maxVal - minVal;
+            const normalized = range <= 0 ? 0 : (value - minVal) / range;
+            const position = Math.max(0, Math.min(1, normalized)) * (DENSITY_COLOR_RANGE.length - 1);
+            const i = Math.floor(position);
+            const j = Math.min(i + 1, DENSITY_COLOR_RANGE.length - 1);
+            const t = position - i;
+            const c = (idx) => Math.floor(DENSITY_COLOR_RANGE[i][idx] + (DENSITY_COLOR_RANGE[j][idx] - DENSITY_COLOR_RANGE[i][idx]) * t);
+            return [c(0), c(1), c(2), 200];
+        }
 
         // Format polygon popup: show key attributes, skip nulls
         function formatPolygonPopup(props) {
@@ -366,7 +381,8 @@
             document.getElementById('btn-hexagons').classList.toggle('active', mode === 'hexagons');
             document.getElementById('btn-polygons').classList.toggle('active', mode === 'polygons');
             document.getElementById('controls').style.display = mode === 'hexagons' ? 'block' : 'none';
-            document.getElementById('legend').style.display = mode === 'hexagons' ? 'block' : 'none';
+            document.getElementById('legend').style.display = 'block';
+            document.getElementById('legend').querySelector('h3').textContent = mode === 'hexagons' ? 'Wet Woodland Density' : 'Wet woodland area (ha)';
             document.getElementById('info').style.display = mode === 'hexagons' ? 'block' : 'none';
             if (mode === 'polygons') hidePolygonPopup();
             updateLayers();
@@ -388,17 +404,7 @@
                     lineWidthMinPixels: 0.5,
                     material: { ambient: 0.35, diffuse: 0.6, shininess: 32, specularColor: [60, 60, 60] },
                     getElevation: f => Math.pow(f.properties.count, heightExponent) * 50,
-                    getFillColor: f => {
-                        const count = f.properties.count;
-                        const normalized = (count - minCount) / (maxCount - minCount);
-                        const colorRange = [[1,152,189],[73,227,206],[216,254,181],[254,237,177],[254,173,84],[209,55,78]];
-                        const position = normalized * (colorRange.length - 1);
-                        const i = Math.floor(position);
-                        const j = Math.min(i + 1, colorRange.length - 1);
-                        const t = position - i;
-                        const c = (idx) => Math.floor(colorRange[i][idx] + (colorRange[j][idx] - colorRange[i][idx]) * t);
-                        return [c(0), c(1), c(2), 200];
-                    },
+                    getFillColor: f => densityToColor(f.properties.count, minCount, maxCount),
                     getLineColor: [80, 80, 80, 100],
                     pickable: true,
                     autoHighlight: true,
@@ -412,8 +418,8 @@
                     stroked: true,
                     filled: true,
                     extruded: false,
-                    getFillColor: [1, 152, 189, 140],
-                    getLineColor: [255, 255, 255, 200],
+                    getFillColor: f => densityToColor(f.properties.total_area_ha ?? 0, polygonMinDensity, polygonMaxDensity),
+                    getLineColor: [80, 80, 80, 200],
                     lineWidthMinPixels: 1,
                     pickable: true,
                     autoHighlight: true,
@@ -511,6 +517,10 @@
                             .then(r => r.json())
                             .then(geo => {
                                 polygonData = geo;
+                                const densities = geo.features.map(f => f.properties.total_area_ha ?? 0);
+                                polygonMinDensity = densities.length ? Math.min(...densities) : 0;
+                                polygonMaxDensity = densities.length ? Math.max(...densities) : 1;
+                                if (polygonMaxDensity === polygonMinDensity) polygonMaxDensity = polygonMinDensity + 1;
                                 document.getElementById('loading').style.display = 'none';
                                 setViewMode('polygons');
                             })
