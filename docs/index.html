@@ -219,7 +219,7 @@
     <div id="loading">Loading wet woodland data...</div>
 
     <div id="view-toggle">
-        <button type="button" id="btn-hexagons" class="active">Hexagons</button>
+        <button type="button" id="btn-hexagons" class="active">Density</button>
         <button type="button" id="btn-polygons">LNRS Regions</button>
     </div>
 
@@ -319,7 +319,7 @@
 
         const DENSITY_COLOR_RANGE = [[1,152,189],[73,227,206],[216,254,181],[254,237,177],[254,173,84],[209,55,78]];
 
-        function densityToColor(value, minVal, maxVal) {
+        function densityToColor(value, minVal, maxVal, alpha = 200) {
             const range = maxVal - minVal;
             const normalized = range <= 0 ? 0 : (value - minVal) / range;
             const position = Math.max(0, Math.min(1, normalized)) * (DENSITY_COLOR_RANGE.length - 1);
@@ -327,7 +327,7 @@
             const j = Math.min(i + 1, DENSITY_COLOR_RANGE.length - 1);
             const t = position - i;
             const c = (idx) => Math.floor(DENSITY_COLOR_RANGE[i][idx] + (DENSITY_COLOR_RANGE[j][idx] - DENSITY_COLOR_RANGE[i][idx]) * t);
-            return [c(0), c(1), c(2), 200];
+            return [c(0), c(1), c(2), alpha];
         }
 
         // Format polygon popup: show key attributes, skip nulls
@@ -418,8 +418,8 @@
                     stroked: true,
                     filled: true,
                     extruded: false,
-                    getFillColor: f => densityToColor(f.properties.total_area_ha ?? 0, polygonMinDensity, polygonMaxDensity),
-                    getLineColor: [80, 80, 80, 200],
+                    getFillColor: f => densityToColor(f.properties.total_area_ha ?? 0, polygonMinDensity, polygonMaxDensity, 128),
+                    getLineColor: [80, 80, 80, 128],
                     lineWidthMinPixels: 1,
                     pickable: true,
                     autoHighlight: true,
