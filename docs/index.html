@@ -5,6 +5,7 @@
     <title>Wet Woodland Distribution in England</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <script src="https://unpkg.com/deck.gl@latest/dist.min.js"></script>
+    <script src="https://unpkg.com/@deck.gl/aggregation-layers@latest/dist.min.js"></script>
     <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
     <link href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css" rel="stylesheet">
     <style>
@@ -228,6 +229,7 @@
     <div id="view-toggle">
         <button type="button" id="btn-hexagons" class="active">Density</button>
         <button type="button" id="btn-polygons">LNRS Regions</button>
+        <button type="button" id="btn-potential">Potential</button>
     </div>
 
     <div id="controls">
@@ -315,9 +317,10 @@
         let layerOpacity = 0.5;
         let minPixelCount = 1;
         let maxPixelCount = Infinity;
-        let viewMode = 'hexagons';  // 'hexagons' | 'polygons'
+        let viewMode = 'hexagons';  // 'hexagons' | 'polygons' | 'potential'
         let hexagonData = null;
         let polygonData = null;
+        let potentialPoints = null;  // [lon, lat, value][] for HeatmapLayer
         let polygonMinDensity = 0;
         let polygonMaxDensity = 1;
         let maxCount = 0;
@@ -404,9 +407,11 @@
             viewMode = mode;
             document.getElementById('btn-hexagons').classList.toggle('active', mode === 'hexagons');
             document.getElementById('btn-polygons').classList.toggle('active', mode === 'polygons');
+            document.getElementById('btn-potential').classList.toggle('active', mode === 'potential');
             document.getElementById('controls').style.display = mode === 'hexagons' ? 'block' : 'none';
             document.getElementById('legend').style.display = 'block';
-            document.getElementById('legend').querySelector('h3').textContent = mode === 'hexagons' ? 'Wet Woodland Density' : 'Wet woodland area (ha)';
+            const legendTitle = document.getElementById('legend').querySelector('h3');
+            legendTitle.textContent = mode === 'hexagons' ? 'Wet Woodland Density' : (mode === 'polygons' ? 'Wet woodland area (ha)' : 'Restoration suitability (0–1)');
             document.getElementById('info').style.display = mode === 'hexagons' ? 'block' : 'none';
             if (mode === 'polygons') hidePolygonPopup();
             updateLayers();
@@ -448,6 +453,18 @@
                     pickable: true,
                     autoHighlight: true,
                     highlightColor: [255, 255, 255, 80]
+                })];
+            }
+            if (viewMode === 'potential' && potentialPoints && potentialPoints.length > 0) {
+                return [new deck.HeatmapLayer({
+                    id: 'potential-heatmap',
+                    data: potentialPoints,
+                    getPosition: d => [d[0], d[1]],
+                    getWeight: d => d[2],
+                    radiusPixels: 25,
+                    intensity: 1,
+                    threshold: 0.03,
+                    colorRange: DENSITY_COLOR_RANGE.map(c => [...c, 255])
                 })];
             }
             return [];
@@ -551,6 +568,25 @@
                             .catch(err => {
                                 console.error(err);
                                 document.getElementById('loading').innerHTML = '❌ Error loading regions.';
+                            });
+                    }
+                });
+                document.getElementById('btn-potential').addEventListener('click', () => {
+                    if (potentialPoints) {
+                        setViewMode('potential');
+                    } else {
+                        document.getElementById('loading').style.display = 'block';
+                        document.getElementById('loading').textContent = 'Loading potential layer...';
+                        fetch('potential_points.json')
+                            .then(r => r.json())
+                            .then(points => {
+                                potentialPoints = points;
+                                document.getElementById('loading').style.display = 'none';
+                                setViewMode('potential');
+                            })
+                            .catch(err => {
+                                console.error(err);
+                                document.getElementById('loading').innerHTML = '❌ Missing potential layer. Run: python raster_potential_to_points.py --raster data/wet_woodland_potential.tif';
                             });
                     }
                 });

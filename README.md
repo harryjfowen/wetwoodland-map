@@ -43,6 +43,28 @@ python raster_to_hexagons.py \
 - `8` = ~1.2km hexagon edge (balanced - **recommended**)
 - `9` = ~500m hexagon edge (more detail, larger file)
 
+### Potential layer (restoration suitability 0–1)
+
+To show the **Potential** tab (raster of MaxEnt restoration suitability 0–1 with the same colour scale):
+
+1. Place your GeoTIFF as `data/wet_woodland_potential.tif`.
+2. Install Pillow: `pip install Pillow`
+3. Run:
+
+```bash
+python raster_potential_to_png.py --raster data/wet_woodland_potential.tif
+```
+
+This writes `docs/potential.png` and `docs/potential_bounds.json`. Commit and push so the Potential tab works on the live site.
+
+For a **heatmap** (zoom‑granular) instead of a static image, generate points for deck.gl `HeatmapLayer`:
+
+```bash
+python raster_potential_to_points.py --raster data/wet_woodland_potential.tif --output docs/potential_points.json
+```
+
+Use `--step 2` or `--step 5` to subsample and reduce file size; `--max-points 500000` caps output (default).
+
 ## Local Testing
 
 Test the visualization locally:
@@ -65,19 +87,26 @@ Any changes to `docs/index.html` or `docs/*.geojson` will be reflected on the li
 ```
 wetwoodland-map/
 ├── data/
-│   └── wet_woodland_predictions.tif  # Source raster (Git LFS)
+│   ├── wet_woodland_predictions.tif  # Source raster (Git LFS)
+│   └── wet_woodland_potential.tif     # Optional: 0–1 suitability for Potential tab
 ├── docs/                              # GitHub Pages folder
 │   ├── index.html                     # Main visualization
-│   └── wet_woodland_hexagons.geojson  # Hexagon data
-├── raster_to_hexagons.py             # Data conversion script
+│   ├── wet_woodland_hexagons.geojson  # Hexagon data
+│   ├── potential.png                  # Optional: from raster_potential_to_png.py
+│   ├── potential_bounds.json         # Optional: bounds for Potential layer
+│   └── potential_points.json         # Optional: points for HeatmapLayer
+├── raster_to_hexagons.py             # Hexagon conversion script
+├── raster_potential_to_png.py        # Potential raster → PNG + bounds
+├── raster_potential_to_points.py     # Potential raster → points [lon, lat, value]
 └── README.md
 ```
 
 ## Features
 
+- **Three views:** **Density** (3D hexagons), **LNRS Regions** (polygons with stats), **Potential** (raster of restoration suitability 0–1, same colour scale)
 - 🗺️ CartoDB Dark Matter base layer (via MapLibre - no API key required!)
 - 📦 3D hexagonal binning for spatial aggregation
-- 🎨 Dynamic 6-color gradient (cyan → turquoise → yellow → orange → red)
+- 🎨 Shared 6-color gradient (cyan → turquoise → yellow → orange → red)
 - ⚙️ Interactive controls:
   - Height exaggeration slider (1x to 10x)
   - Opacity slider (0.5 to 1.0)
