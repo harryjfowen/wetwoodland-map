@@ -5,7 +5,7 @@
     <title>Wet Woodland Distribution in England</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <script src="https://unpkg.com/deck.gl@latest/dist.min.js"></script>
-    <script src="https://unpkg.com/@deck.gl/aggregation-layers@latest/dist.min.js"></script>
+    <script src="https://unpkg.com/@deck.gl/geo-layers@latest/dist.min.js"></script>
     <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
     <link href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css" rel="stylesheet">
     <style>
@@ -320,7 +320,7 @@
         let viewMode = 'hexagons';  // 'hexagons' | 'polygons' | 'potential'
         let hexagonData = null;
         let polygonData = null;
-        let potentialPoints = null;  // [lon, lat, value][] for HeatmapLayer
+        // Potential view uses TileLayer (raster tiles at potential_tiles/{z}/{x}/{y}.png)
         let polygonMinDensity = 0;
         let polygonMaxDensity = 1;
         let maxCount = 0;
@@ -455,17 +455,23 @@
                     highlightColor: [255, 255, 255, 80]
                 })];
             }
-            if (viewMode === 'potential' && potentialPoints && potentialPoints.length > 0) {
-                return [new deck.HeatmapLayer({
-                    id: 'potential-heatmap',
-                    data: potentialPoints,
-                    getPosition: d => [d[0], d[1]],
-                    getWeight: d => d[2],
-                    radiusPixels: 25,
-                    intensity: 1,
-                    threshold: 0.03,
-                    opacity: 0.85,
-                    colorRange: DENSITY_COLOR_RANGE.map(c => [...c, 200])
+            if (viewMode === 'potential') {
+                return [new deck.TileLayer({
+                    id: 'potential-raster-tiles',
+                    data: 'potential_tiles/{z}/{x}/{y}.png',
+                    minZoom: 0,
+                    maxZoom: 12,
+                    extent: [-700000, 6300000, 300000, 7600000],
+                    tileSize: 256,
+                    renderSubLayers: props => {
+                        if (!props.data) return null;
+                        const { boundingBox } = props.tile;
+                        return new deck.BitmapLayer(props, {
+                            data: null,
+                            image: props.data,
+                            bounds: [boundingBox[0][0], boundingBox[0][1], boundingBox[1][0], boundingBox[1][1]]
+                        });
+                    }
                 })];
             }
             return [];
@@ -572,25 +578,7 @@
                             });
                     }
                 });
-                document.getElementById('btn-potential').addEventListener('click', () => {
-                    if (potentialPoints) {
-                        setViewMode('potential');
-                    } else {
-                        document.getElementById('loading').style.display = 'block';
-                        document.getElementById('loading').textContent = 'Loading potential layer...';
-                        fetch('potential_points.json')
-                            .then(r => r.json())
-                            .then(points => {
-                                potentialPoints = points;
-                                document.getElementById('loading').style.display = 'none';
-                                setViewMode('potential');
-                            })
-                            .catch(err => {
-                                console.error(err);
-                                document.getElementById('loading').innerHTML = '❌ Missing potential layer. Run: python raster_potential_to_points.py --raster data/wet_woodland_potential.tif';
-                            });
-                    }
-                });
+                document.getElementById('btn-potential').addEventListener('click', () => setViewMode('potential'));
                 document.getElementById('close-polygon-popup').addEventListener('click', hidePolygonPopup);
             })
             .catch(error => {

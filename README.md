@@ -57,13 +57,14 @@ python raster_potential_to_png.py --raster data/wet_woodland_potential.tif
 
 This writes `docs/potential.png` and `docs/potential_bounds.json`. Commit and push so the Potential tab works on the live site.
 
-For a **heatmap** (zoom‑granular) instead of a static image, generate points for deck.gl `HeatmapLayer`:
+For a **raster tile layer** (higher resolution as you zoom in), generate tiles with GDAL:
 
 ```bash
-python raster_potential_to_points.py --raster data/wet_woodland_potential.tif --output docs/potential_points.json
+pip install rasterio Pillow   # if not already
+python raster_potential_to_tiles.py --raster data/wet_woodland_potential.tif
 ```
 
-Use `--step 2` or `--step 5` to subsample and reduce file size; `--max-points 500000` caps output (default).
+This writes `docs/potential_tiles/{z}/{x}/{y}.png`. Requires `gdal2tiles.py` (from GDAL). Optionally use `--max-zoom 10` to limit zoom levels.
 
 ## Local Testing
 
@@ -93,11 +94,11 @@ wetwoodland-map/
 │   ├── index.html                     # Main visualization
 │   ├── wet_woodland_hexagons.geojson  # Hexagon data
 │   ├── potential.png                  # Optional: from raster_potential_to_png.py
-│   ├── potential_bounds.json         # Optional: bounds for Potential layer
-│   └── potential_points.json         # Optional: points for HeatmapLayer
+│   ├── potential_bounds.json         # Optional: bounds for BitmapLayer fallback
+│   └── potential_tiles/               # Optional: {z}/{x}/{y}.png from raster_potential_to_tiles.py
 ├── raster_to_hexagons.py             # Hexagon conversion script
 ├── raster_potential_to_png.py        # Potential raster → PNG + bounds
-├── raster_potential_to_points.py     # Potential raster → points [lon, lat, value]
+├── raster_potential_to_tiles.py      # Potential raster → tile pyramid (zoom‑dependent resolution)
 └── README.md
 ```
 
