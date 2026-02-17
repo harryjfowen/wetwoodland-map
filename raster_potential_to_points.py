@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
 Sample wet_woodland_potential.tif (0-1 restoration suitability) to points [lon, lat, value]
-for deck.gl HeatmapLayer. Subsamples the raster to keep JSON size reasonable.
+for deck.gl HeatmapLayer. Optionally filter by minimum suitability to keep full resolution
+only where it matters (e.g. --min-value 0.5).
 """
 
 import json
@@ -22,16 +23,23 @@ def main():
     parser.add_argument("--raster", default="data/wet_woodland_potential.tif", help="Input GeoTIFF (0-1 suitability)")
     parser.add_argument("--output", default="docs/potential_points.json", help="Output JSON path")
     parser.add_argument(
+        "--min-value",
+        type=float,
+        default=None,
+        metavar="0-1",
+        help="Only output pixels with suitability >= this (e.g. 0.5). Enables full resolution for suitable areas.",
+    )
+    parser.add_argument(
         "--step",
         type=int,
         default=1,
-        help="Sample every Nth pixel (1=all, 2=half, 10=sparse). Increase to reduce file size.",
+        help="Sample every Nth pixel (1=all). Ignored if --min-value is set (always step=1 when filtering).",
     )
     parser.add_argument(
         "--max-points",
         type=int,
         default=500_000,
-        help="Max points to output (if step=1 would exceed this, step is increased)",
+        help="Max points when not using --min-value (step is increased to stay under this).",
     )
     args = parser.parse_args()
 
@@ -69,18 +77,21 @@ def main():
         else:
             values = np.full_like(data, np.nan)
 
-        # Decide step so we don't exceed max_points
-        step = args.step
-        n_valid = int(np.sum(valid))
-        if n_valid > 0:
-            # if we sample every `step` pixel, we get ~ n_valid / (step*step) points (2D)
-            # rough: total pixels = h*w, sampled = (h//step)*(w//step)
-            sampled = (h // step) * (w // step)
-            while sampled > args.max_points and step < min(h, w):
-                step += 1
+        use_min_value = args.min_value is not None
+        if use_min_value:
+            step = 1
+            min_val = float(args.min_value)
+            print(f"Filtering: only pixels with suitability >= {min_val}")
+        else:
+            step = args.step
+            n_valid = int(np.sum(valid))
+            if n_valid > 0:
                 sampled = (h // step) * (w // step)
-        if step > args.step:
-            print(f"Step increased to {step} to stay under {args.max_points:,} points")
+                while sampled > args.max_points and step < min(h, w):
+                    step += 1
+                    sampled = (h // step) * (w // step)
+            if step > args.step:
+                print(f"Step increased to {step} to stay under {args.max_points:,} points")
 
         points = []
         for row in range(0, h, step):
@@ -88,7 +99,8 @@ def main():
                 v = values[row, col]
                 if not np.isfinite(v) or np.isnan(v):
                     continue
-                # Pixel center in pixel coords
+                if use_min_value and v < min_val:
+                    continue
                 lon, lat = transform * (col + 0.5, row + 0.5)
                 points.append([round(lon, 6), round(lat, 6), round(float(v), 4)])
 
