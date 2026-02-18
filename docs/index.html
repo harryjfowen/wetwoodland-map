@@ -86,6 +86,36 @@
             font-size: 11px;
             color: #666;
         }
+        .landvalue-toggle {
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+        .landvalue-label {
+            font-size: 11px;
+            color: #333;
+            margin-right: 4px;
+        }
+        .landvalue-toggle button {
+            padding: 4px 10px;
+            border: 1px solid #ccc;
+            background: #f5f5f5;
+            color: #333;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 11px;
+            font-family: inherit;
+        }
+        .landvalue-toggle button.active {
+            background: #0066cc;
+            color: white;
+            border-color: #0066cc;
+        }
+        .landvalue-toggle button:not(.active):hover {
+            background: #e8e8e8;
+        }
         #loading {
             position: absolute;
             top: 50%;
@@ -288,7 +318,13 @@
         <p style="margin: 3px 0; font-size: 12px;"><strong>Mean NN distance:</strong> 53.2 m</p>
     </div>
     <div id="legend">
-        <h3>Wet Woodland Density</h3>
+        <h3 id="legend-title">Wet Woodland Density</h3>
+        <div id="landvalue-toggle" class="landvalue-toggle" style="display: none;">
+            <span class="landvalue-label">Land value:</span>
+            <button type="button" id="lv-12" class="active">1–2</button>
+            <button type="button" id="lv-3">3</button>
+            <button type="button" id="lv-45">4–5</button>
+        </div>
         <div class="legend-gradient"></div>
         <div class="legend-labels">
             <span>Low</span>
@@ -320,7 +356,8 @@
         let viewMode = 'hexagons';  // 'hexagons' | 'polygons' | 'potential'
         let hexagonData = null;
         let polygonData = null;
-        let potentialPoints = null;  // [lon, lat, value][] for HeatmapLayer
+        let potentialPoints = null;  // [lon, lat, value] or [lon, lat, value, landClass] for HeatmapLayer
+        let potentialLandValueClass = 0;  // 0=1-2, 1=3, 2=4-5 (only used when points have 4 elements)
         let polygonMinDensity = 0;
         let polygonMaxDensity = 1;
         let maxCount = 0;
@@ -410,8 +447,27 @@
             document.getElementById('btn-potential').classList.toggle('active', mode === 'potential');
             document.getElementById('controls').style.display = mode === 'hexagons' ? 'block' : 'none';
             document.getElementById('legend').style.display = 'block';
-            const legendTitle = document.getElementById('legend').querySelector('h3');
-            legendTitle.textContent = mode === 'hexagons' ? 'Wet Woodland Density' : (mode === 'polygons' ? 'Wet woodland area (ha)' : 'Restoration suitability (0.15 – 1)');
+            const legendTitle = document.getElementById('legend-title');
+            const hasLandValueClasses = potentialPoints && potentialPoints.length > 0 && potentialPoints[0].length === 4;
+            const lvNames = ['Grade 1–2', 'Grade 3', 'Grade 4–5'];
+            if (mode === 'hexagons') {
+                legendTitle.textContent = 'Wet Woodland Density';
+                document.getElementById('landvalue-toggle').style.display = 'none';
+            } else if (mode === 'polygons') {
+                legendTitle.textContent = 'Wet woodland area (ha)';
+                document.getElementById('landvalue-toggle').style.display = 'none';
+            } else {
+                legendTitle.textContent = hasLandValueClasses
+                    ? 'Restoration suitability — ' + lvNames[potentialLandValueClass]
+                    : 'Restoration suitability (0.15 – 1)';
+                const lvToggle = document.getElementById('landvalue-toggle');
+                lvToggle.style.display = hasLandValueClasses ? 'flex' : 'none';
+                if (hasLandValueClasses) {
+                    document.getElementById('lv-12').classList.toggle('active', potentialLandValueClass === 0);
+                    document.getElementById('lv-3').classList.toggle('active', potentialLandValueClass === 1);
+                    document.getElementById('lv-45').classList.toggle('active', potentialLandValueClass === 2);
+                }
+            }
             document.getElementById('info').style.display = mode === 'hexagons' ? 'block' : 'none';
             if (mode === 'polygons') hidePolygonPopup();
             updateLayers();
@@ -456,9 +512,14 @@
                 })];
             }
             if (viewMode === 'potential' && potentialPoints && potentialPoints.length > 0) {
+                const hasClass = potentialPoints[0].length === 4;
+                const data = hasClass
+                    ? potentialPoints.filter(d => d[3] === potentialLandValueClass)
+                    : potentialPoints;
+                if (data.length === 0) return [];
                 return [new deck.HeatmapLayer({
                     id: 'potential-heatmap',
-                    data: potentialPoints,
+                    data: data,
                     getPosition: d => [d[0], d[1]],
                     getWeight: d => d[2],
                     radiusPixels: 25,
@@ -587,8 +648,12 @@
                             .then(r => r.ok ? r.arrayBuffer() : Promise.reject(new Error('no bin')))
                             .then(buf => {
                                 const f32 = new Float32Array(buf);
+                                const stride = (f32.length >= 4 && [0, 1, 2].includes(f32[3])) ? 4 : 3;
                                 const points = [];
-                                for (let i = 0; i < f32.length; i += 3) points.push([f32[i], f32[i+1], f32[i+2]]);
+                                for (let i = 0; i < f32.length; i += stride) {
+                                    if (stride === 4) points.push([f32[i], f32[i+1], f32[i+2], f32[i+3]]);
+                                    else points.push([f32[i], f32[i+1], f32[i+2]]);
+                                }
                                 return points;
                             })
                             .then(loadPotential)
@@ -597,6 +662,37 @@
                                 console.error(err);
                                 document.getElementById('loading').innerHTML = '❌ Missing potential layer. Run: python raster_potential_to_points.py --raster data/wet_woodland_potential.tif';
                             });
+                    }
+                });
+                const lvNames = ['Grade 1–2', 'Grade 3', 'Grade 4–5'];
+                document.getElementById('lv-12').addEventListener('click', () => {
+                    potentialLandValueClass = 0;
+                    if (viewMode === 'potential') {
+                        document.getElementById('legend-title').textContent = 'Restoration suitability — ' + lvNames[0];
+                        document.getElementById('lv-12').classList.add('active');
+                        document.getElementById('lv-3').classList.remove('active');
+                        document.getElementById('lv-45').classList.remove('active');
+                        updateLayers();
+                    }
+                });
+                document.getElementById('lv-3').addEventListener('click', () => {
+                    potentialLandValueClass = 1;
+                    if (viewMode === 'potential') {
+                        document.getElementById('legend-title').textContent = 'Restoration suitability — ' + lvNames[1];
+                        document.getElementById('lv-3').classList.add('active');
+                        document.getElementById('lv-12').classList.remove('active');
+                        document.getElementById('lv-45').classList.remove('active');
+                        updateLayers();
+                    }
+                });
+                document.getElementById('lv-45').addEventListener('click', () => {
+                    potentialLandValueClass = 2;
+                    if (viewMode === 'potential') {
+                        document.getElementById('legend-title').textContent = 'Restoration suitability — ' + lvNames[2];
+                        document.getElementById('lv-45').classList.add('active');
+                        document.getElementById('lv-12').classList.remove('active');
+                        document.getElementById('lv-3').classList.remove('active');
+                        updateLayers();
                     }
                 });
                 document.getElementById('close-polygon-popup').addEventListener('click', hidePolygonPopup);
