@@ -41,6 +41,11 @@ def main():
         default=500_000,
         help="Max points when not using --min-value (step is increased to stay under this).",
     )
+    parser.add_argument(
+        "--binary",
+        action="store_true",
+        help="Write .bin (12 bytes/point: lon, lat, value as float32) to stay under GitHub 100MB limit.",
+    )
     args = parser.parse_args()
 
     raster_path = Path(args.raster)
@@ -105,10 +110,16 @@ def main():
                 points.append([round(lon, 6), round(lat, 6), round(float(v), 4)])
 
         print(f"Writing {len(points):,} points to {out_path}")
-        with open(out_path, "w") as f:
-            json.dump(points, f, separators=(",", ":"))
+        if args.binary:
+            out_path = out_path.with_suffix(".bin") if out_path.suffix == ".json" else out_path
+            arr = np.array(points, dtype=np.float32)
+            arr.tofile(out_path)
+            print(f"Binary: {out_path.stat().st_size / (1024*1024):.1f} MB (12 bytes/point)")
+        else:
+            with open(out_path, "w") as f:
+                json.dump(points, f, separators=(",", ":"))
 
-    print("Done. Use potential_points.json with HeatmapLayer.")
+    print("Done. Use potential_points.json (or .bin) with HeatmapLayer.")
 
 
 if __name__ == "__main__":
