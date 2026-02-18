@@ -230,6 +230,11 @@
             color: #000;
             font-weight: 600;
         }
+        #polygon-popup .popup-section-divider {
+            margin: 14px 0 10px 0;
+            border: none;
+            border-top: 1px solid #ccc;
+        }
         #polygon-popup .polygon-popup-section {
             margin: 10px 0 4px 0;
             font-weight: 600;
@@ -394,14 +399,6 @@
             if (fmt(props.effective_mesh_size_ha)) rows.push({ key: 'Effective mesh size (ha)', val: fmt(props.effective_mesh_size_ha) });
             if (fmt(props.mean_nn_m)) rows.push({ key: 'Mean NN distance (m)', val: fmt(props.mean_nn_m) });
             if (fmt(props.num_patches)) rows.push({ key: 'Number of patches', val: fmt(props.num_patches) });
-            // Suitability for restoration (ha by land value class)
-            const s12 = props.suitable_ha_grade_12, s3 = props.suitable_ha_grade_3, s45 = props.suitable_ha_grade_45;
-            if (s12 != null || s3 != null || s45 != null) {
-                rows.push({ section: 'Suitability for restoration' });
-                if (fmt(s12) != null) rows.push({ key: 'Grade 1–2 (ha)', val: fmt(s12) });
-                if (fmt(s3) != null) rows.push({ key: 'Grade 3 (ha)', val: fmt(s3) });
-                if (fmt(s45) != null) rows.push({ key: 'Grade 4–5 (ha)', val: fmt(s45) });
-            }
             // Patch distribution (same format as density info pane)
             const bands = [
                 { key: '≤ 0.01 ha', pct: props.pct_leq_0_01, area: props.area_leq_0_01_ha },
@@ -413,6 +410,7 @@
             ];
             const hasPatchData = bands.some(b => (b.pct != null && b.pct !== '') || (b.area != null && b.area !== ''));
             if (hasPatchData) {
+                rows.push({ divider: true });
                 rows.push({ section: 'Patch Distribution' });
                 bands.forEach(b => {
                     const pct = pctFmt(b.pct);
@@ -427,6 +425,15 @@
                 if (fmt(props.largest_patch_ha)) rows.push({ key: 'Largest patch (ha)', val: fmt(props.largest_patch_ha) });
                 if (fmt(props.median_patch_ha)) rows.push({ key: 'Median patch (ha)', val: fmt(props.median_patch_ha) });
             }
+            // Suitability for restoration (ha by land value class) — last section
+            const s12 = props.suitable_ha_grade_12, s3 = props.suitable_ha_grade_3, s45 = props.suitable_ha_grade_45;
+            if (s12 != null || s3 != null || s45 != null) {
+                rows.push({ divider: true });
+                rows.push({ section: 'Suitability for restoration' });
+                if (fmt(s12) != null) rows.push({ key: 'Grade 1–2 (ha)', val: fmt(s12) });
+                if (fmt(s3) != null) rows.push({ key: 'Grade 3 (ha)', val: fmt(s3) });
+                if (fmt(s45) != null) rows.push({ key: 'Grade 4–5 (ha)', val: fmt(s45) });
+            }
             return rows;
         }
 
@@ -437,6 +444,7 @@
             const body = document.getElementById('polygon-popup-body');
             body.innerHTML = formatPolygonPopup(object.properties)
                 .map(r => {
+                    if (r.divider) return `<hr class="popup-section-divider" />`;
                     if (r.section) return `<p class="polygon-popup-section">${r.section}</p>`;
                     return `<div class="attr-row"><strong class="attr-key">${r.key}</strong><span class="attr-val">${r.val}</span></div>`;
                 })
