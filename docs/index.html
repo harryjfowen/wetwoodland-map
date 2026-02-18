@@ -394,6 +394,14 @@
             if (fmt(props.effective_mesh_size_ha)) rows.push({ key: 'Effective mesh size (ha)', val: fmt(props.effective_mesh_size_ha) });
             if (fmt(props.mean_nn_m)) rows.push({ key: 'Mean NN distance (m)', val: fmt(props.mean_nn_m) });
             if (fmt(props.num_patches)) rows.push({ key: 'Number of patches', val: fmt(props.num_patches) });
+            // Suitability for restoration (ha by land value class)
+            const s12 = props.suitable_ha_grade_12, s3 = props.suitable_ha_grade_3, s45 = props.suitable_ha_grade_45;
+            if (s12 != null || s3 != null || s45 != null) {
+                rows.push({ section: 'Suitability for restoration' });
+                if (fmt(s12) != null) rows.push({ key: 'Grade 1–2 (ha)', val: fmt(s12) });
+                if (fmt(s3) != null) rows.push({ key: 'Grade 3 (ha)', val: fmt(s3) });
+                if (fmt(s45) != null) rows.push({ key: 'Grade 4–5 (ha)', val: fmt(s45) });
+            }
             // Patch distribution (same format as density info pane)
             const bands = [
                 { key: '≤ 0.01 ha', pct: props.pct_leq_0_01, area: props.area_leq_0_01_ha },
@@ -648,7 +656,15 @@
                             .then(r => r.ok ? r.arrayBuffer() : Promise.reject(new Error('no bin')))
                             .then(buf => {
                                 const f32 = new Float32Array(buf);
-                                const stride = (f32.length >= 4 && [0, 1, 2].includes(f32[3])) ? 4 : 3;
+                                // 16 bytes/point = 4 floats (with land class); 12 bytes = 3 floats
+                                const nFloats = f32.length;
+                                const isClass = (v) => v >= 0 && v <= 2 && (v === 0 || v === 1 || v === 2 || Math.abs(v - Math.round(v)) < 1e-5);
+                                let is4Value = nFloats >= 4 && isClass(f32[3]);
+                                if (!is4Value && nFloats >= 16) {
+                                    const c1 = f32[3], c2 = f32[7], c3 = f32[11];
+                                    if (isClass(c1) && isClass(c2) && isClass(c3)) is4Value = true;
+                                }
+                                const stride = is4Value ? 4 : 3;
                                 const points = [];
                                 for (let i = 0; i < f32.length; i += stride) {
                                     if (stride === 4) points.push([f32[i], f32[i+1], f32[i+2], f32[i+3]]);
