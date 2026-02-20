@@ -84,6 +84,20 @@ python raster_potential_to_points.py --raster data/wet_woodland_potential_10m.ti
 python lnrs_suitability_stats.py
 ```
 
+### Refreshing LNRS region data (patch distribution, peat, etc.)
+
+The LNRS stats in the Regions tab (patch distribution, on/off peat, effective mesh size, etc.) come from **`data/wet_woodland_lnrs_regions.gpkg`**, which is produced by your external pipeline (not this repo). After you refresh that GPKG:
+
+1. Export to GeoJSON for the web app:
+   ```bash
+   ogr2ogr -f GeoJSON docs/wet_woodland_lnrs_regions.geojson data/wet_woodland_lnrs_regions.gpkg
+   ```
+2. Overwrite area fields from the report so they match the density layer:
+   ```bash
+   python update_lnrs_geojson_from_report.py
+   ```
+3. Optionally refresh suitability-by-grade (see LNRS suitability stats above).
+
 ## Local Testing
 
 Test the visualization locally:
