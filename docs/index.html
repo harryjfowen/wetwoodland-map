@@ -305,8 +305,7 @@
 
         <p style="margin: 8px 0 4px 0; font-weight: 600; font-size: 13px;">Coverage Statistics</p>
         <p style="margin: 3px 0; font-size: 12px;"><strong>Total area:</strong> 83,148 ha (831 km²)</p>
-        <p style="margin: 3px 0; font-size: 12px;"><strong>Forest cover:</strong> 5.1% of study area</p>
-        <p style="margin: 3px 0; font-size: 12px;"><strong>Within LNRS:</strong> 83,128 ha (0.63%)</p>
+        <p style="margin: 3px 0; font-size: 12px;"><strong>Wet woodland:</strong> 5.1% of total forest cover</p>
         <p style="margin: 3px 0; font-size: 12px;"><strong>On peat:</strong> 7,265 ha (8.7%)</p>
         <p style="margin: 3px 0; font-size: 12px;"><strong>Off peat:</strong> 75,883 ha (91.3%)</p>
 
@@ -400,9 +399,8 @@
             if (fmt(props.effective_mesh_size_ha)) rows.push({ key: 'Effective mesh size (ha)', val: fmt(props.effective_mesh_size_ha) });
             if (fmt(props.mean_nn_m)) rows.push({ key: 'Mean NN distance (m)', val: fmt(props.mean_nn_m) });
             if (fmt(props.num_patches)) rows.push({ key: 'Number of patches', val: fmt(props.num_patches) });
-            // Patch distribution (same format as density info pane)
+            // Patch distribution (same bands as national; omit ≤ 0.01 ha so LNRS matches national 0 ha)
             const bands = [
-                { key: '≤ 0.01 ha', pct: props.pct_leq_0_01, area: props.area_leq_0_01_ha },
                 { key: '0.01-0.1 ha', pct: props.pct_0_01_0_1, area: props.area_0_01_0_1_ha },
                 { key: '0.1-1 ha', pct: props.pct_0_1_1, area: props.area_0_1_1_ha },
                 { key: '1-5 ha', pct: props.pct_1_5, area: props.area_1_5_ha },
