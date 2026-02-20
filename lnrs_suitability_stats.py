@@ -2,8 +2,9 @@
 """
 Add suitability-for-restoration stats to LNRS region polygons: hectares of land
 suitable for restoration (potential >= 0.15) by agricultural land class
-(Grade 1-2, Grade 3, Grade 4-5) per region. Uses potential_points.bin (16-byte:
-lon, lat, value, class). Requires: pip install shapely.
+(Grade 1-2, Grade 3, Grade 4-5) per region. Uses potential points .bin (16-byte:
+lon, lat, value, class). Prefers docs/potential_points_stats.bin (10m) when present,
+else docs/potential_points.bin. Requires: pip install shapely.
 """
 
 import json
@@ -14,20 +15,32 @@ import numpy as np
 from shapely import prepare
 from shapely.geometry import shape, Point
 
+# Stats use 10m points when this file exists (from raster_potential_to_points 10m + landvalue)
+POINTS_STATS_10M = Path("docs/potential_points_stats.bin")
+POINTS_FALLBACK = Path("docs/potential_points.bin")
+
 
 def main():
     import argparse
     p = argparse.ArgumentParser(description="Add suitability ha by land class to LNRS GeoJSON")
     p.add_argument("--regions", default="docs/wet_woodland_lnrs_regions.geojson", help="LNRS GeoJSON")
-    p.add_argument("--points", default="docs/potential_points.bin", help="Potential points .bin (16 bytes/point)")
+    p.add_argument(
+        "--points",
+        default=None,
+        help="Potential points .bin (16 bytes/point). Default: potential_points_stats.bin (10m) if present, else potential_points.bin",
+    )
     p.add_argument("--output", default=None, help="Output GeoJSON (default: overwrite --regions)")
     args = p.parse_args()
     out_path = Path(args.output) if args.output else Path(args.regions)
     regions_path = Path(args.regions)
-    points_path = Path(args.points)
+    points_path = Path(args.points) if args.points else (POINTS_STATS_10M if POINTS_STATS_10M.exists() else POINTS_FALLBACK)
 
     if not points_path.exists():
-        raise FileNotFoundError(f"Points file not found: {points_path}. Run raster_potential_to_points.py with --landvalue first.")
+        raise FileNotFoundError(
+            f"Points file not found: {points_path}. For 10m stats run: "
+            "raster_potential_to_points.py --raster data/wet_woodland_potential_10m.tif --landvalue data/landvalue_classes_10m.tif "
+            "--output docs/potential_points_stats.bin --binary (after landvalue_to_raster.py with 10m potential)."
+        )
     if not regions_path.exists():
         raise FileNotFoundError(f"Regions file not found: {regions_path}")
 

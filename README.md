@@ -14,7 +14,7 @@ This project visualizes wet woodland as 3D hexagons where:
 ## Data
 
 - **Density (hexagons):** `data/wet_woodland_mosaic_hysteresis.tif` — mosaic with hysteresis; unconnected filtering etc. is already applied in the raster; the script only derives hexbins.
-- **Potential (suitability):** `data/wet_woodland_potential.tif` — restoration suitability 0–1 for the Potential tab and tiles.
+- **Potential (suitability):** `data/wet_woodland_potential.tif` (100m) for the Potential tab and tiles (visual). Use `data/wet_woodland_potential_10m.tif` only for **LNRS suitability-by-grade stats** (finer resolution).
 - **CRS:** OSGB36 / British National Grid (EPSG:27700)
 
 ## Setup
@@ -43,9 +43,11 @@ python raster_to_hexagons.py \
 
 ### Potential layer (restoration suitability 0–1)
 
+**Heatmap rendering** uses only the **100m** TIF (or points sampled from it). **Suitability stats** in the LNRS popup use **10m** when you run the stats pipeline below.
+
 To show the **Potential** tab (raster of MaxEnt restoration suitability 0–1 with the same colour scale):
 
-1. Place your GeoTIFF as `data/wet_woodland_potential.tif`.
+1. Place your GeoTIFF as `data/wet_woodland_potential.tif` (100m) for the map. For **LNRS stats** (suitability-by-grade), also add `data/wet_woodland_potential_10m.tif` and run the stats pipeline below.
 2. Install Pillow: `pip install Pillow`
 3. Run:
 
@@ -63,6 +65,24 @@ python raster_potential_to_tiles.py --raster data/wet_woodland_potential.tif
 ```
 
 This writes `docs/potential_tiles/{z}/{x}/{y}.png`. Requires `gdal2tiles.py` (from GDAL). Optionally use `--max-zoom 10` to limit zoom levels.
+
+### LNRS suitability stats (10m)
+
+The **map** uses the 100m suitability raster for the Potential tab. The **LNRS region popup** “Suitability for restoration” (ha by land grade) is computed from a **10m** points file for finer stats. To generate it:
+
+1. Place the 10m suitability raster as `data/wet_woodland_potential_10m.tif`.
+2. Rasterize land value to the 10m grid and sample 10m points with land class:
+
+```bash
+python landvalue_to_raster.py --potential-raster data/wet_woodland_potential_10m.tif --output data/landvalue_classes_10m.tif
+python raster_potential_to_points.py --raster data/wet_woodland_potential_10m.tif --landvalue data/landvalue_classes_10m.tif --output docs/potential_points_stats.bin --binary
+```
+
+3. Update LNRS regions with suitability-by-grade (script uses `potential_points_stats.bin` when present):
+
+```bash
+python lnrs_suitability_stats.py
+```
 
 ## Local Testing
 

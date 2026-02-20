@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 """
-Sample wet_woodland_potential.tif (0-1 restoration suitability) to points [lon, lat, value]
+Sample wet_woodland_potential (0-1 restoration suitability) to points [lon, lat, value]
 or [lon, lat, value, land_class] for deck.gl HeatmapLayer. Optionally burn land value class
 (0=1-2, 1=3, 2=4-5) when --landvalue is provided.
+
+Visual (Potential tab): use default 100m raster → docs/potential_points.json/.bin.
+Stats (LNRS suitability-by-grade): use 10m raster and output docs/potential_points_stats.bin.
 """
 
 import json
@@ -14,12 +17,19 @@ import rasterio
 from rasterio.warp import transform as warp_transform
 from rasterio.crs import CRS
 
+# Visual layer uses 100m; stats use 10m (separate run with --output docs/potential_points_stats.bin)
+DEFAULT_RASTER_VISUAL = Path("data/wet_woodland_potential.tif")
+
 
 def main():
     parser = argparse.ArgumentParser(
         description="Convert potential raster to points [lon, lat, value] for HeatmapLayer"
     )
-    parser.add_argument("--raster", default="data/wet_woodland_potential.tif", help="Input GeoTIFF (0-1 suitability)")
+    parser.add_argument(
+        "--raster",
+        default=str(DEFAULT_RASTER_VISUAL),
+        help="Input GeoTIFF (0-1 suitability). Default: 100m for map visual. Use 10m + --output docs/potential_points_stats.bin for LNRS stats.",
+    )
     parser.add_argument("--output", default="docs/potential_points.json", help="Output JSON path")
     parser.add_argument(
         "--min-value",
@@ -59,7 +69,10 @@ def main():
     use_landvalue = args.landvalue and Path(args.landvalue).exists()
 
     if not raster_path.exists():
-        raise FileNotFoundError(f"Raster not found: {raster_path}. Place wet_woodland_potential.tif there and re-run.")
+        raise FileNotFoundError(
+            f"Raster not found: {raster_path}. "
+            "Place wet_woodland_potential.tif in data/ for map visual (or pass --raster)."
+        )
 
     print(f"Reading: {raster_path}")
     with rasterio.open(raster_path) as src:
