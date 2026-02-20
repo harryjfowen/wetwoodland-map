@@ -684,7 +684,7 @@
                             .catch(() => fetch('potential_points.json').then(r => r.json()).then(loadPotential))
                             .catch(err => {
                                 console.error(err);
-                                document.getElementById('loading').innerHTML = '❌ Missing potential layer. Run: python raster_potential_to_points.py --raster data/wet_woodland_potential.tif';
+                                document.getElementById('loading').innerHTML = '❌ Missing potential layer. Run: python raster_potential_to_points.py --raster data/wet_woodland_potential.tif --output docs/potential_points.json';
                             });
                     }
                 });

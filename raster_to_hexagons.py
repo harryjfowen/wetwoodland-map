@@ -2,6 +2,9 @@
 """
 Convert wet woodland raster to hexagon-aggregated GeoJSON for deck.gl visualization.
 Counts wet woodland pixels within hexagonal bins.
+
+Use wet_woodland_mosaic_hysteresis.tif when filtering (unconnected etc.) is already
+done in the raster; this script only derives the hexbins.
 """
 
 import numpy as np
@@ -12,21 +15,22 @@ from pathlib import Path
 import h3
 from tqdm import tqdm
 
-def raster_to_hexagons(raster_path, output_geojson, h3_resolution=7):
+def raster_to_hexagons(raster_path, output_geojson, h3_resolution=7, threshold=0.0):
     """
     Convert raster to hexagon-aggregated data.
 
     Parameters:
-    - raster_path: Path to wet woodland predictions raster
+    - raster_path: Path to wet woodland raster (e.g. mosaic hysteresis; filtering already applied)
     - output_geojson: Output GeoJSON path
     - h3_resolution: H3 hexagon resolution (7 = ~5km edge, 8 = ~1.2km edge, 9 = ~500m edge)
+    - threshold: Pixels with value > threshold count as wet woodland (default 0 = any positive)
     """
 
     print(f"Reading raster: {raster_path}")
-    print(f"H3 resolution: {h3_resolution}")
+    print(f"H3 resolution: {h3_resolution}, threshold: > {threshold}")
 
     with rasterio.open(raster_path) as src:
-        # Read band 1 (binary predictions: 0/1/255)
+        # Read band 1 (e.g. mosaic hysteresis: 0/1 or 0–1, filtering already applied)
         data = src.read(1)
         transform = src.transform
         crs = src.crs
@@ -40,12 +44,12 @@ def raster_to_hexagons(raster_path, output_geojson, h3_resolution=7):
         bounds_wgs84 = transform_bounds(crs, 'EPSG:4326', *src.bounds)
         print(f"Bounds (WGS84): {bounds_wgs84}")
 
-        # Find wet woodland pixels (probability > 0.5 or exclude nodata)
+        # Wet woodland = valid and value > threshold (mosaic hysteresis: use >0 for binary)
         valid_mask = (data != nodata) & np.isfinite(data)
-        wet_mask = valid_mask & (data > 0.5)
+        wet_mask = valid_mask & (data > threshold)
         wet_count = wet_mask.sum()
         print(f"Total valid pixels: {valid_mask.sum():,}")
-        print(f"Total wet woodland pixels (>0.5 probability): {wet_count:,}")
+        print(f"Total wet woodland pixels (>{threshold}): {wet_count:,}")
 
         if wet_count == 0:
             print("No wet woodland pixels found!")
@@ -129,11 +133,27 @@ def raster_to_hexagons(raster_path, output_geojson, h3_resolution=7):
 if __name__ == "__main__":
     import argparse
 
-    parser = argparse.ArgumentParser(description="Convert wet woodland raster to hexagons")
-    parser.add_argument("--raster", default="wet_woodland_predictions.tif", help="Input raster")
-    parser.add_argument("--output", default="visualization/wet_woodland_hexagons.geojson", help="Output GeoJSON")
+    parser = argparse.ArgumentParser(
+        description="Convert wet woodland raster to hexagons for deck.gl. Use mosaic hysteresis when filtering is already applied."
+    )
+    parser.add_argument(
+        "--raster",
+        default="data/wet_woodland_mosaic_hysteresis.tif",
+        help="Input raster (e.g. wet_woodland_mosaic_hysteresis.tif; filtering already in raster)",
+    )
+    parser.add_argument(
+        "--output",
+        default="docs/wet_woodland_hexagons.geojson",
+        help="Output GeoJSON (use docs/ for the web app)",
+    )
     parser.add_argument("--resolution", type=int, default=8, help="H3 resolution (7=~5km, 8=~1.2km, 9=~500m)")
+    parser.add_argument(
+        "--threshold",
+        type=float,
+        default=0.0,
+        help="Count pixels with value > this as wet woodland (default 0 = any positive)",
+    )
 
     args = parser.parse_args()
 
-    raster_to_hexagons(args.raster, args.output, args.resolution)
+    raster_to_hexagons(args.raster, args.output, args.resolution, threshold=args.threshold)
