@@ -6,17 +6,15 @@ Interactive 3D visualization of wet woodland distribution across England using d
 
 ## Overview
 
-This project visualizes wet woodland predictions as 3D hexagons where:
+This project visualizes wet woodland as 3D hexagons where:
 - **Height** represents the number of wet woodland pixels within each hexagon
 - **Color** shows density with a green gradient (darker = lower, brighter = higher)
 - **Interactive** controls allow rotation, zoom, and pan
 
 ## Data
 
-- **Source Raster:** `data/wet_woodland_predictions.tif` (415 MB, stored with Git LFS)
-- **Format:** Binary predictions (0 = not wet woodland, 1 = wet woodland, 255 = nodata)
-- **Resolution:** 5m pixels
-- **Coverage:** England
+- **Density (hexagons):** `data/wet_woodland_mosaic_hysteresis.tif` — mosaic with hysteresis; unconnected filtering etc. is already applied in the raster; the script only derives hexbins.
+- **Potential (suitability):** `data/wet_woodland_potential.tif` — restoration suitability 0–1 for the Potential tab and tiles.
 - **CRS:** OSGB36 / British National Grid (EPSG:27700)
 
 ## Setup
@@ -29,11 +27,11 @@ pip install h3 numpy rasterio tqdm
 
 ### Generate Hexagon Data
 
-Run the conversion script to aggregate raster data into hexagons:
+Run the conversion script to derive hexbins from the wet woodland mosaic (filtering already in the raster):
 
 ```bash
 python raster_to_hexagons.py \
-  --raster data/wet_woodland_predictions.tif \
+  --raster data/wet_woodland_mosaic_hysteresis.tif \
   --output docs/wet_woodland_hexagons.geojson \
   --resolution 8
 ```
