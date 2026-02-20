@@ -2,7 +2,9 @@
 """
 Dissolve land value shapefile into 3 groups (1-2, 3, 4-5) and rasterize to the same
 grid as the potential raster. Output: landvalue_classes.tif (byte: 0=1-2, 1=3, 2=4-5, 255=nodata).
-Requires: ogr2ogr (GDAL), rasterio, numpy. Run from repo root.
+Default grid is 100m potential; use --potential-raster data/wet_woodland_potential_10m.tif
+and --output data/landvalue_classes_10m.tif for LNRS stats. Requires: ogr2ogr (GDAL), rasterio, numpy.
+Run from repo root.
 """
 
 import json
@@ -19,7 +21,11 @@ from rasterio.crs import CRS
 def main():
     parser = argparse.ArgumentParser(description="Dissolve land value into 3 groups and rasterize to potential grid")
     parser.add_argument("--landvalue-shp", default="data/landvalue.shp", help="Land value shapefile")
-    parser.add_argument("--potential-raster", default="data/wet_woodland_potential.tif", help="Reference raster (grid/CRS)")
+    parser.add_argument(
+        "--potential-raster",
+        default="data/wet_woodland_potential.tif",
+        help="Reference raster (grid/CRS). Use 10m raster + --output data/landvalue_classes_10m.tif for LNRS stats.",
+    )
     parser.add_argument("--output", default="data/landvalue_classes.tif", help="Output class raster")
     args = parser.parse_args()
 
