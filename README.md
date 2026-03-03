@@ -92,11 +92,14 @@ The LNRS stats in the Regions tab (patch distribution, on/off peat, effective me
    ```bash
    ogr2ogr -f GeoJSON docs/wet_woodland_lnrs_regions.geojson data/wet_woodland_lnrs_regions.gpkg
    ```
-2. Overwrite area fields from the report so they match the density layer:
+2. Update LNRS per-region extent and suitability totals from report files:
    ```bash
    python update_lnrs_geojson_from_report.py
    ```
-3. Optionally refresh suitability-by-grade (see LNRS suitability stats above).
+   This pulls:
+   - Extent from `data/wet_woodland_REPORT.txt` (`total_area_ha`, `region_area_ha`)
+   - Suitability totals from `data/potential_stat_report.txt` (`suitable_area_ha`, peat/forest splits, etc.)
+3. Optionally refresh suitability-by-grade fields (`suitable_ha_grade_12/3/45`) using the 10m points workflow above.
 
 ## Local Testing
 
