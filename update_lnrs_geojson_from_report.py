@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """
 Update LNRS GeoJSON with report-derived stats:
-- Extent stats per LNRS from data/wet_woodland_REPORT.txt (LNRS REGIONAL SUMMARY)
+- Extent stats from an extent report (default: data/wetwoodland_stats.txt)
+  Supports either:
+  - data/wet_woodland_REPORT.txt (full LNRS numeric table)
+  - data/wetwoodland_stats.txt (top-20 LNRS by name)
 - Suitability stats per LNRS from data/potential_stat_report.txt ([lnrs:*] blocks)
 
 Run this after refreshing report files so the Regions tab popup aligns with
@@ -14,10 +17,17 @@ from pathlib import Path
 from typing import Any
 
 
-def parse_extent_report(report_path: Path) -> dict[int, tuple[float, float, float]]:
-    """Map LNRS number -> (wet_ha, ref_area_ha, prop_pct) from wet_woodland_REPORT."""
+def parse_extent_report(report_path: Path) -> tuple[dict[int, tuple[float, float, float]], dict[str, float]]:
+    """
+    Parse extent report in either format:
+    - Numeric LNRS table: map LNRS_ID(int) -> (wet_ha, ref_area_ha, prop_pct)
+    - Named top-20 list: map normalized LNRS name -> wet_ha
+    """
     text = report_path.read_text()
-    out = {}
+    out_by_id: dict[int, tuple[float, float, float]] = {}
+    out_by_name: dict[str, float] = {}
+
+    # Full numeric table format (wet_woodland_REPORT.txt)
     for line in text.splitlines():
         m = re.match(r"LNRS\s+(\d+)\s+([\d,]+\.?\d*)\s+([\d,]+\.?\d*)\s+([\d.]+)", line)
         if m:
@@ -25,8 +35,20 @@ def parse_extent_report(report_path: Path) -> dict[int, tuple[float, float, floa
             wet_ha = float(m.group(2).replace(",", ""))
             ref_ha = float(m.group(3).replace(",", ""))
             prop = float(m.group(4))
-            out[lnrs_num] = (wet_ha, ref_ha, prop)
-    return out
+            out_by_id[lnrs_num] = (wet_ha, ref_ha, prop)
+
+    # Named top-20 format (wetwoodland_stats.txt)
+    # Example: "  Devon  16,841.9    25,088"
+    for line in text.splitlines():
+        m = re.match(r"\s{2,}(.+?)\s+([\d,]+\.?\d*)\s+([\d,]+)\s*$", line)
+        if not m:
+            continue
+        name = m.group(1).strip()
+        wet_ha = _to_number(m.group(2))
+        if name and wet_ha is not None:
+            out_by_name[_normalize_name(name)] = wet_ha
+
+    return out_by_id, out_by_name
 
 
 def _to_number(value: str) -> float | None:
@@ -102,7 +124,11 @@ def main():
     import argparse
     parser = argparse.ArgumentParser(description="Update LNRS GeoJSON with extent + suitability stats from report files")
     parser.add_argument("--geojson", default="docs/wet_woodland_lnrs_regions.geojson", help="Input/output LNRS GeoJSON")
-    parser.add_argument("--extent-report", default="data/wet_woodland_REPORT.txt", help="Extent report with LNRS table")
+    parser.add_argument(
+        "--extent-report",
+        default="data/wetwoodland_stats.txt",
+        help="Extent report path (optional). Supports wetwoodland_stats.txt and wet_woodland_REPORT.txt",
+    )
     parser.add_argument(
         "--potential-report",
         default="data/potential_stat_report.txt",
@@ -114,13 +140,19 @@ def main():
     extent_report_path = Path(args.extent_report)
     potential_report_path = Path(args.potential_report)
 
-    if not extent_report_path.exists():
-        raise FileNotFoundError(f"Extent report not found: {extent_report_path}")
     if not geojson_path.exists():
         raise FileNotFoundError(f"GeoJSON not found: {geojson_path}")
 
-    extent_stats = parse_extent_report(extent_report_path)
-    print(f"Parsed {len(extent_stats)} LNRS extent rows from {extent_report_path}")
+    extent_stats_by_id: dict[int, tuple[float, float, float]] = {}
+    extent_stats_by_name: dict[str, float] = {}
+    if extent_report_path.exists():
+        extent_stats_by_id, extent_stats_by_name = parse_extent_report(extent_report_path)
+        print(
+            f"Parsed extent rows from {extent_report_path}: "
+            f"{len(extent_stats_by_id)} by LNRS ID, {len(extent_stats_by_name)} by name"
+        )
+    else:
+        print(f"Extent report not found (skipping extent updates): {extent_report_path}")
 
     potential_stats: dict[str, dict[str, Any]] = {}
     suitability_threshold = None
@@ -139,6 +171,7 @@ def main():
         ) from exc
 
     extent_updated = 0
+    extent_name_only_updated = 0
     suitability_updated = 0
     for feat in geojson["features"]:
         props = feat.setdefault("properties", {})
@@ -146,12 +179,21 @@ def main():
 
         # Extent mapping by LNRS number
         n = int(str(lnrs_id).lstrip("0") or 0) if str(lnrs_id).isdigit() else None
-        if n is not None and n in extent_stats:
-            wet_ha, ref_ha, prop_pct = extent_stats[n]
+        if n is not None and n in extent_stats_by_id:
+            wet_ha, ref_ha, prop_pct = extent_stats_by_id[n]
             props["total_area_ha"] = round(wet_ha, 2)
             props["region_area_ha"] = round(ref_ha, 2)
             props["wet_prop_pct"] = round(prop_pct, 4)
             extent_updated += 1
+        else:
+            # Fallback: name-only extent (e.g. wetwoodland_stats top-20)
+            name = props.get("Name")
+            if isinstance(name, str):
+                key_name = _normalize_name(name)
+                wet_ha = extent_stats_by_name.get(key_name)
+                if wet_ha is not None:
+                    props["total_area_ha"] = round(wet_ha, 2)
+                    extent_name_only_updated += 1
 
         # Suitability mapping by LNRS name
         name = props.get("Name")
@@ -169,7 +211,8 @@ def main():
     with open(geojson_path, "w") as f:
         json.dump(geojson, f, separators=(",", ":"))
 
-    print(f"Updated {extent_updated} features with extent stats")
+    print(f"Updated {extent_updated} features with full extent stats (id + area + proportion)")
+    print(f"Updated {extent_name_only_updated} features with name-only extent area")
     print(f"Updated {suitability_updated} features with suitability stats")
     print(f"Wrote {geojson_path}")
 
