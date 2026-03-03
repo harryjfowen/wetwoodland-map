@@ -97,7 +97,7 @@ The LNRS stats in the Regions tab (patch distribution, on/off peat, effective me
    python update_lnrs_geojson_from_report.py
    ```
    This pulls:
-   - Extent from `data/wet_woodland_REPORT.txt` (`total_area_ha`, `region_area_ha`)
+   - Extent from `data/wetwoodland_stats.txt` by default (or `--extent-report`), updating `total_area_ha`
    - Suitability totals from `data/potential_stat_report.txt` (`suitable_area_ha`, peat/forest splits, etc.)
 3. Optionally refresh suitability-by-grade fields (`suitable_ha_grade_12/3/45`) using the 10m points workflow above.
 
