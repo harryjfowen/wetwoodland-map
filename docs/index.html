@@ -30,6 +30,8 @@
             border-radius: 4px;
             box-shadow: 0 2px 8px rgba(0,0,0,0.3);
             max-width: 350px;
+            max-height: calc(100vh - 90px);
+            overflow-y: auto;
             font-size: 13px;
             z-index: 1;
         }
@@ -304,23 +306,28 @@
         <p style="margin-bottom: 12px; font-size: 12px;">3D hexagon visualization across England</p>
 
         <p style="margin: 8px 0 4px 0; font-weight: 600; font-size: 13px;">Coverage Statistics</p>
-        <p style="margin: 3px 0; font-size: 12px;"><strong>Total area:</strong> 83,148 ha (831 km²)</p>
-        <p style="margin: 3px 0; font-size: 12px;"><strong>Wet woodland:</strong> 5.1% of total forest cover</p>
-        <p style="margin: 3px 0; font-size: 12px;"><strong>On peat:</strong> 7,265 ha (8.7%)</p>
-        <p style="margin: 3px 0; font-size: 12px;"><strong>Off peat:</strong> 75,883 ha (91.3%)</p>
+        <p style="margin: 3px 0; font-size: 12px;"><strong>Total area:</strong> 118,513 ha (1,185 km²)</p>
+        <p style="margin: 3px 0; font-size: 12px;"><strong>Wet woodland:</strong> 4.28% of total forest cover</p>
+        <p style="margin: 3px 0; font-size: 12px;"><strong>On peat:</strong> 6,459 ha (5.45%)</p>
+        <p style="margin: 3px 0; font-size: 12px;"><strong>Off peat:</strong> 112,055 ha (94.55%)</p>
 
         <p style="margin: 8px 0 4px 0; font-weight: 600; font-size: 13px;">Patch Distribution</p>
-        <p style="margin: 3px 0; font-size: 12px;"><strong>≤ 0.01 ha:</strong> 0.0% — 0 ha</p>
-        <p style="margin: 3px 0; font-size: 12px;"><strong>0.01-0.1 ha:</strong> 22.6% — 18,765 ha</p>
-        <p style="margin: 3px 0; font-size: 12px;"><strong>0.1-1 ha:</strong> 50.9% — 42,345 ha</p>
-        <p style="margin: 3px 0; font-size: 12px;"><strong>1-5 ha:</strong> 20.2% — 16,755 ha</p>
-        <p style="margin: 3px 0; font-size: 12px;"><strong>5-10 ha:</strong> 3.9% — 3,216 ha</p>
-        <p style="margin: 3px 0; font-size: 12px;"><strong>≥ 10 ha:</strong> 2.5% — 2,068 ha</p>
-        <p style="margin: 3px 0; font-size: 12px;"><strong>Patches:</strong> 564,505 | <strong>Median:</strong> 0.06 ha | <strong>Mean:</strong> 0.15 ha</p>
+        <p style="margin: 3px 0; font-size: 12px;"><strong>≤ 0.01 ha:</strong> 0.00% — 0 ha</p>
+        <p style="margin: 3px 0; font-size: 12px;"><strong>0.01-0.1 ha:</strong> 2.94% — 3,483 ha</p>
+        <p style="margin: 3px 0; font-size: 12px;"><strong>0.1-1 ha:</strong> 38.40% — 45,503 ha</p>
+        <p style="margin: 3px 0; font-size: 12px;"><strong>1-5 ha:</strong> 40.71% — 48,249 ha</p>
+        <p style="margin: 3px 0; font-size: 12px;"><strong>5-10 ha:</strong> 11.42% — 13,534 ha</p>
+        <p style="margin: 3px 0; font-size: 12px;"><strong>≥ 10 ha:</strong> 6.53% — 7,744 ha</p>
+        <p style="margin: 3px 0; font-size: 12px;"><strong>Patches:</strong> 228,122 | <strong>Median:</strong> 0.20 ha | <strong>Mean:</strong> 0.52 ha</p>
+
+        <p style="margin: 8px 0 4px 0; font-weight: 600; font-size: 13px;">TOW Classification</p>
+        <p style="margin: 3px 0; font-size: 12px;"><strong>Lone Trees:</strong> 8,104 patches — 243 ha (0.21%)</p>
+        <p style="margin: 3px 0; font-size: 12px;"><strong>Group of Trees:</strong> 57,755 patches — 3,966 ha (3.35%)</p>
+        <p style="margin: 3px 0; font-size: 12px;"><strong>Small Woodlands:</strong> 162,263 patches — 114,304 ha (96.45%)</p>
 
         <p style="margin: 8px 0 4px 0; font-weight: 600; font-size: 13px;">Fragmentation</p>
-        <p style="margin: 3px 0; font-size: 12px;"><strong>Effective Mesh Size:</strong> 1.42 ha (0.01 km²)</p>
-        <p style="margin: 3px 0; font-size: 12px;"><strong>Mean NN distance:</strong> 136.4 m</p>
+        <p style="margin: 3px 0; font-size: 12px;"><strong>Effective Mesh Size:</strong> 3.05 ha (0.03 km²)</p>
+        <p style="margin: 3px 0; font-size: 12px;"><strong>Mean NN distance:</strong> 224.6 m | <strong>Median:</strong> 158.4 m</p>
     </div>
     <div id="legend">
         <h3 id="legend-title">Wet Woodland Density</h3>
@@ -424,14 +431,26 @@
                 if (fmt(props.largest_patch_ha)) rows.push({ key: 'Largest patch (ha)', val: fmt(props.largest_patch_ha) });
                 if (fmt(props.median_patch_ha)) rows.push({ key: 'Median patch (ha)', val: fmt(props.median_patch_ha) });
             }
-            // Suitability for restoration (ha by land value class) — last section
+            // Suitability for restoration — prefer grade split, else show report-based total
             const s12 = props.suitable_ha_grade_12, s3 = props.suitable_ha_grade_3, s45 = props.suitable_ha_grade_45;
-            if (s12 != null || s3 != null || s45 != null) {
+            const sTotal = props.suitable_area_ha;
+            const sOnPeat = props.suitable_on_peat_area_ha;
+            const sOffPeat = props.suitable_off_peat_area_ha;
+            const sPct = props.suitable_pct_of_valid;
+            const sThreshold = props.suitable_threshold;
+            if (s12 != null || s3 != null || s45 != null || sTotal != null) {
                 rows.push({ divider: true });
                 rows.push({ section: 'Suitability for restoration' });
                 if (fmt(s12) != null) rows.push({ key: 'Agricultural Grade 1–2 (ha)', val: fmt(s12) });
                 if (fmt(s3) != null) rows.push({ key: 'Agricultural Grade 3 (ha)', val: fmt(s3) });
                 if (fmt(s45) != null) rows.push({ key: 'Agricultural Grade 4–5 (ha)', val: fmt(s45) });
+                if (fmt(sTotal) != null && (s12 == null && s3 == null && s45 == null)) {
+                    rows.push({ key: 'Total suitable area (ha)', val: fmt(sTotal) });
+                    if (fmt(sOnPeat) != null) rows.push({ key: 'Suitable on peat (ha)', val: fmt(sOnPeat) });
+                    if (fmt(sOffPeat) != null) rows.push({ key: 'Suitable off peat (ha)', val: fmt(sOffPeat) });
+                    if (fmt(sPct) != null) rows.push({ key: 'Suitable % of valid', val: fmt(sPct) + '%' });
+                    if (fmt(sThreshold) != null) rows.push({ key: 'Suitability threshold', val: '≥ ' + fmt(sThreshold) });
+                }
             }
             return rows;
         }
