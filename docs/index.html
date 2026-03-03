@@ -372,6 +372,10 @@
         let deckgl = null;
 
         const DENSITY_COLOR_RANGE = [[1,152,189],[73,227,206],[216,254,181],[254,237,177],[254,173,84],[209,55,78]];
+        const POTENTIAL_COLOR_RANGE = DENSITY_COLOR_RANGE.map((c, i) => {
+            const alphaRamp = [0, 28, 70, 125, 180, 230];
+            return [...c, alphaRamp[i]];
+        });
 
         function densityToColor(value, minVal, maxVal, alpha = 200) {
             const range = maxVal - minVal;
@@ -555,7 +559,7 @@
                     intensity: 1,
                     threshold: 0.03,
                     opacity: 0.85,
-                    colorRange: DENSITY_COLOR_RANGE.map(c => [...c, 200])
+                    colorRange: POTENTIAL_COLOR_RANGE
                 })];
             }
             return [];
