@@ -373,7 +373,8 @@
 
         const DENSITY_COLOR_RANGE = [[1,152,189],[73,227,206],[216,254,181],[254,237,177],[254,173,84],[209,55,78]];
         const POTENTIAL_COLOR_RANGE = DENSITY_COLOR_RANGE.map((c, i) => {
-            const alphaRamp = [0, 28, 70, 125, 180, 230];
+            // Keep low-suitability blue/cyan visible on the basemap while still tapering the ramp.
+            const alphaRamp = [72, 96, 128, 164, 200, 230];
             return [...c, alphaRamp[i]];
         });
 
