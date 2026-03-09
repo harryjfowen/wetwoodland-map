@@ -13,7 +13,7 @@ This project visualizes wet woodland as 3D hexagons where:
 
 ## Data
 
-- **Density (hexagons):** `data/wet_woodland_mosaic_hysteresis.tif` — mosaic with hysteresis; unconnected filtering etc. is already applied in the raster; the script only derives hexbins.
+- **Density (hexagons):** `data/wetwoodland_extent.tif` — current wet woodland extent raster; band 1 is the binary extent surface used to derive hexbins.
 - **Potential (suitability):** `data/wet_woodland_potential.tif` (100m) for the Potential tab and tiles (visual). Use `data/wet_woodland_potential_10m.tif` only for **LNRS suitability-by-grade stats** (finer resolution).
 - **CRS:** OSGB36 / British National Grid (EPSG:27700)
 
@@ -27,11 +27,11 @@ pip install h3 numpy rasterio tqdm
 
 ### Generate Hexagon Data
 
-Run the conversion script to derive hexbins from the wet woodland mosaic (filtering already in the raster):
+Run the conversion script to derive hexbins from the wet woodland extent raster:
 
 ```bash
 python raster_to_hexagons.py \
-  --raster data/wet_woodland_mosaic_hysteresis.tif \
+  --raster data/wetwoodland_extent.tif \
   --output docs/wet_woodland_hexagons.geojson \
   --resolution 8
 ```
@@ -43,28 +43,28 @@ python raster_to_hexagons.py \
 
 ### Potential layer (restoration suitability 0–1)
 
-**Heatmap rendering** uses only the **100m** TIF (or points sampled from it). **Suitability stats** in the LNRS popup use **10m** when you run the stats pipeline below.
+The live **Potential** tab reads sampled point files from `docs/potential_points.bin` (preferred) or `docs/potential_points.json` (fallback). **Suitability stats** in the LNRS popup use **10m** when you run the stats pipeline below.
 
-To show the **Potential** tab (raster of MaxEnt restoration suitability 0–1 with the same colour scale):
+To refresh the Potential tab and keep the `1–2 | 3 | 4–5` land-grade toggle:
 
-1. Place your GeoTIFF as `data/wet_woodland_potential.tif` (100m) for the map. For **LNRS stats** (suitability-by-grade), also add `data/wet_woodland_potential_10m.tif` and run the stats pipeline below.
-2. Install Pillow: `pip install Pillow`
-3. Run:
-
-```bash
-python raster_potential_to_png.py --raster data/wet_woodland_potential.tif
-```
-
-This writes `docs/potential.png` and `docs/potential_bounds.json`. Commit and push so the Potential tab works on the live site.
-
-For a **raster tile layer** (higher resolution as you zoom in), generate tiles with GDAL:
+1. Place your GeoTIFF as `data/wet_woodland_potential.tif` (100m) for the map.
+2. Ensure the aligned 100m land-value raster exists as `data/landvalue_classes.tif`.
+3. Generate both the binary primary file and JSON fallback:
 
 ```bash
-pip install rasterio Pillow   # if not already
-python raster_potential_to_tiles.py --raster data/wet_woodland_potential.tif
+python raster_potential_to_points.py \
+  --raster data/wet_woodland_potential.tif \
+  --landvalue data/landvalue_classes.tif \
+  --output docs/potential_points.bin \
+  --binary
+
+python raster_potential_to_points.py \
+  --raster data/wet_woodland_potential.tif \
+  --landvalue data/landvalue_classes.tif \
+  --output docs/potential_points.json
 ```
 
-This writes `docs/potential_tiles/{z}/{x}/{y}.png`. Requires `gdal2tiles.py` (from GDAL). Optionally use `--max-zoom 10` to limit zoom levels.
+If you omit `--landvalue`, the Potential tab still renders but the land-grade toggle is hidden because the class channel is missing from the sampled points.
 
 ### LNRS suitability stats (10m)
 

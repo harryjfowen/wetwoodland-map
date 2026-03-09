@@ -3,8 +3,9 @@
 Convert wet woodland raster to hexagon-aggregated GeoJSON for deck.gl visualization.
 Counts wet woodland pixels within hexagonal bins.
 
-Use wet_woodland_mosaic_hysteresis.tif when filtering (unconnected etc.) is already
-done in the raster; this script only derives the hexbins.
+Default input is the current wet woodland extent raster. When using a multi-band raster,
+band 1 is treated as the binary wet woodland extent surface and this script only derives
+the hexbins.
 """
 
 import numpy as np
@@ -30,7 +31,7 @@ def raster_to_hexagons(raster_path, output_geojson, h3_resolution=7, threshold=0
     print(f"H3 resolution: {h3_resolution}, threshold: > {threshold}")
 
     with rasterio.open(raster_path) as src:
-        # Read band 1 (e.g. mosaic hysteresis: 0/1 or 0–1, filtering already applied)
+        # Read band 1 as the binary wet woodland extent surface.
         data = src.read(1)
         transform = src.transform
         crs = src.crs
@@ -44,7 +45,7 @@ def raster_to_hexagons(raster_path, output_geojson, h3_resolution=7, threshold=0
         bounds_wgs84 = transform_bounds(crs, 'EPSG:4326', *src.bounds)
         print(f"Bounds (WGS84): {bounds_wgs84}")
 
-        # Wet woodland = valid and value > threshold (mosaic hysteresis: use >0 for binary)
+        # Wet woodland = valid and value > threshold.
         valid_mask = (data != nodata) & np.isfinite(data)
         wet_mask = valid_mask & (data > threshold)
         wet_count = wet_mask.sum()
@@ -134,12 +135,12 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(
-        description="Convert wet woodland raster to hexagons for deck.gl. Use mosaic hysteresis when filtering is already applied."
+        description="Convert a wet woodland extent raster to hexagons for deck.gl."
     )
     parser.add_argument(
         "--raster",
-        default="data/wet_woodland_mosaic_hysteresis.tif",
-        help="Input raster (e.g. wet_woodland_mosaic_hysteresis.tif; filtering already in raster)",
+        default="data/wetwoodland_extent.tif",
+        help="Input raster (band 1 is treated as the binary extent surface)",
     )
     parser.add_argument(
         "--output",
