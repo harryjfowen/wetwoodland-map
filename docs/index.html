@@ -261,7 +261,7 @@
     <div id="loading">Loading wet woodland data...</div>
 
     <div id="view-toggle">
-        <button type="button" id="btn-raster">Extent</button>
+        <button type="button" id="btn-raster">Probability</button>
         <button type="button" id="btn-hexagons" class="active">Density</button>
         <button type="button" id="btn-polygons">LNRS Regions</button>
         <button type="button" id="btn-potential">Potential</button>
@@ -380,7 +380,7 @@
             rgb(180, 222, 44),
             rgb(253, 231, 37)
         )`;
-        const COG_URL = './wetwoodland_extent_b2.cog.bin';
+        const COG_URL = './wetwoodland_probability.cog.bin';
 
         let heightExponent = 1.0;
         let layerOpacity = 0.5;
@@ -635,7 +635,7 @@
             }
 
             document.getElementById('loading').style.display = 'block';
-            document.getElementById('loading').textContent = 'Loading full-resolution band 2 COG...';
+            document.getElementById('loading').textContent = 'Loading probability raster...';
 
             try {
                 const cogAvailable = await checkCogAvailable();
@@ -648,8 +648,8 @@
                 console.error(error);
                 if (fallbackToHexagons) setViewMode('hexagons');
                 document.getElementById('loading').textContent = fallbackToHexagons
-                    ? '❌ Failed to load band 2 COG. Switched to Density.'
-                    : '❌ Failed to load band 2 COG: ' + error.message;
+                    ? '❌ Failed to load probability raster. Switched to Density.'
+                    : '❌ Failed to load probability raster: ' + error.message;
                 return false;
             }
         }
@@ -800,7 +800,7 @@
                 return;
             }
 
-            legendTitle.textContent = 'Wet woodland extent — band 2';
+            legendTitle.textContent = 'Wet woodland probability';
             legendGradient.style.background = VIRIDIS_GRADIENT;
             legendLabels.innerHTML = '<span>Low</span><span>High</span>';
             document.getElementById('landvalue-toggle').style.display = 'none';

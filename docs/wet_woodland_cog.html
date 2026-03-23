@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <title>Wet Woodland — Band 2 Raster</title>
+    <title>Wet Woodland — Probability Raster</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
         :root {
@@ -141,11 +141,11 @@
         <a href="index.html">Density</a>
         <a href="index.html">LNRS Regions</a>
         <a href="index.html">Potential</a>
-        <a href="wet_woodland_cog.html" class="active">Band 2 Raster</a>
+        <a href="wet_woodland_cog.html" class="active">Probability</a>
     </nav>
     <div id="title">
         <h1>Wet Woodland — Hysteresis-Masked Probability</h1>
-        <p>Native 10 m · band 2 COG · viridis ramp · light basemap underlay · deck.gl-raster v0.3</p>
+        <p>Published probability COG · viridis ramp · light basemap underlay · deck.gl-raster v0.3</p>
     </div>
 </div>
 
@@ -157,7 +157,7 @@
 
 <div id="status">
     Renderer: <span id="stat-renderer">—</span><br>
-    COG: <span id="stat-cog">wetwoodland_extent.tif band 2</span><br>
+    COG: <span id="stat-cog">wetwoodland_probability.cog.bin</span><br>
     Zoom: <span id="stat-zoom">—</span>
 </div>
 
@@ -201,7 +201,7 @@ const viridisLUT = buildViridisLUT();
 // Attempt deck.gl-raster v0.3 COGLayer via esm.sh
 // Falls back to TileLayer + geotiff.js if unavailable
 // ─────────────────────────────────────────────────────────────────────────────
-const COG_URL = './wetwoodland_extent_b2.cog.bin';
+const COG_URL = './wetwoodland_probability.cog.bin';
 
 let useNativeLayer = false;
 let COGLayer, CreateTexture, Colormap, FilterNoDataVal, GeoTIFFReader;
