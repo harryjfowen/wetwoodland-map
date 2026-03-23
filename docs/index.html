@@ -13,12 +13,14 @@
             margin: 0;
             padding: 0;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f7f5ef;
         }
         #map {
             position: absolute;
             top: 0;
             bottom: 0;
             width: 100%;
+            background: #f7f5ef;
         }
         #info {
             position: absolute;
@@ -726,7 +728,7 @@
                 deckgl = new deck.DeckGL({
                     container: 'map',
                     mapLib: maplibregl,
-                    mapStyle: 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json',
+                    mapStyle: 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json',
                     initialViewState: INITIAL_VIEW_STATE,
                     controller: true,
                     layers: getLayers(),
