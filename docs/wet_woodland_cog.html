@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <title>Wet Woodland — Probability (10m)</title>
+    <title>Wet Woodland — Band 2 Raster</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
         :root {
@@ -11,7 +11,7 @@
             --panel-border: rgba(255, 255, 255, 0.10);
             --text-main: #f4f1ea;
             --text-muted: #9a9080;
-            --accent: #f0f921;
+            --accent: #b8de29;
         }
         html, body { margin: 0; padding: 0; width: 100%; height: 100%; background: var(--bg); overflow: hidden; }
         #deck-canvas { position: absolute; inset: 0; }
@@ -99,11 +99,12 @@
         .legend-bar {
             height: 10px; border-radius: 3px;
             background: linear-gradient(to right,
-                rgba(13,8,135,0.15),
-                rgb(84,2,163),
-                rgb(185,50,137),
-                rgb(244,136,73),
-                rgb(240,249,33)
+                rgba(68,1,84,0.15),
+                rgb(72,40,120),
+                rgb(49,104,142),
+                rgb(31,158,137),
+                rgb(180,222,44),
+                rgb(253,231,37)
             );
             margin-bottom: 6px;
         }
@@ -140,11 +141,11 @@
         <a href="index.html">Density</a>
         <a href="index.html">LNRS Regions</a>
         <a href="index.html">Potential</a>
-        <a href="wet_woodland_cog.html" class="active">Probability 10m</a>
+        <a href="wet_woodland_cog.html" class="active">Band 2 Raster</a>
     </nav>
     <div id="title">
         <h1>Wet Woodland — Hysteresis-Masked Probability</h1>
-        <p>Native 10 m · uint8 WebP COG · GPU plasma colormap · deck.gl-raster v0.3</p>
+        <p>Native 10 m · band 2 COG · viridis ramp · light basemap underlay · deck.gl-raster v0.3</p>
     </div>
 </div>
 
@@ -156,26 +157,27 @@
 
 <div id="status">
     Renderer: <span id="stat-renderer">—</span><br>
-    COG: <span id="stat-cog">wetwoodland_probability.cog.tif</span><br>
+    COG: <span id="stat-cog">wetwoodland_extent.tif band 2</span><br>
     Zoom: <span id="stat-zoom">—</span>
 </div>
 
 <script type="module">
 // ─────────────────────────────────────────────────────────────────────────────
-// Build a 256×1 plasma colormap ImageData for the GPU LUT
-// Matches the PLASMA_GRADIENT in index.html
+// Build a 256×1 viridis colormap ImageData for the GPU LUT
+// Matches the raster tab legend in index.html
 // ─────────────────────────────────────────────────────────────────────────────
-function buildPlasmaLUT() {
+function buildViridisLUT() {
     const STOPS = [
-        [0,    [13,  8,   135, 0  ]],
-        [0.03, [13,  8,   135, 50 ]],
-        [0.14, [84,  2,   163, 130]],
-        [0.29, [139, 10,  165, 170]],
-        [0.43, [185, 50,  137, 200]],
-        [0.57, [219, 92,  104, 215]],
-        [0.71, [244, 136, 73,  225]],
-        [0.86, [254, 188, 43,  232]],
-        [1.00, [240, 249, 33,  240]],
+        [0.00, [68,  1,   84,  0  ]],
+        [0.03, [68,  1,   84,  50 ]],
+        [0.13, [72,  40,  120, 118]],
+        [0.25, [62,  74,  137, 150]],
+        [0.38, [49,  104, 142, 180]],
+        [0.50, [38,  130, 142, 200]],
+        [0.63, [31,  158, 137, 214]],
+        [0.75, [53,  183, 121, 226]],
+        [0.88, [109, 205, 89,  234]],
+        [1.00, [253, 231, 37,  242]],
     ];
     const arr = new Uint8ClampedArray(256 * 4);
     for (let i = 0; i < 256; i++) {
@@ -193,13 +195,13 @@ function buildPlasmaLUT() {
     return new ImageData(arr, 256, 1);
 }
 
-const plasmaLUT = buildPlasmaLUT();
+const viridisLUT = buildViridisLUT();
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Attempt deck.gl-raster v0.3 COGLayer via esm.sh
 // Falls back to TileLayer + geotiff.js if unavailable
 // ─────────────────────────────────────────────────────────────────────────────
-const COG_URL = 'https://github.com/harryjfowen/wetwoodland-map/releases/download/v1.0-data/wetwoodland_probability.cog.tif';
+const COG_URL = './wetwoodland_extent_b2.cog.bin';
 
 let useNativeLayer = false;
 let COGLayer, CreateTexture, Colormap, FilterNoDataVal, GeoTIFFReader;
@@ -259,7 +261,7 @@ function buildNativeCOGLayer() {
         maxRequests: 6,
         renderTile: (texture) => [
             { module: CreateTexture,   props: { textureName: texture } },
-            { module: Colormap,        props: { colormapTexture: plasmaLUT } },
+            { module: Colormap,        props: { colormapTexture: viridisLUT } },
             { module: FilterNoDataVal, props: { value: 255 } },
         ],
         onGeoTIFFLoad: (_tiff, { geographicBounds }) => {
@@ -269,7 +271,7 @@ function buildNativeCOGLayer() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TileLayer fallback — geotiff.js, CPU plasma colormap, uint8 COG
+// TileLayer fallback — geotiff.js, CPU viridis colormap, uint8 COG
 // ─────────────────────────────────────────────────────────────────────────────
 async function buildFallbackLayer() {
     const { fromUrl } = await import('https://esm.sh/geotiff@2.1.3');
@@ -305,8 +307,8 @@ async function buildFallbackLayer() {
         return pick;
     }
 
-    // LUT from ImageData (pre-built plasma)
-    const lut = plasmaLUT.data; // Uint8ClampedArray, 256*4 values
+    // LUT from ImageData (pre-built viridis)
+    const lut = viridisLUT.data; // Uint8ClampedArray, 256*4 values
 
     const R = 6378137;
     const lonToM = lon => lon * Math.PI * R / 180;
@@ -376,7 +378,7 @@ const layer = useNativeLayer ? buildNativeCOGLayer() : await buildFallbackLayer(
 new deck.DeckGL({
     canvas: 'deck-canvas',
     mapLib: maplibregl,
-    mapStyle: 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json',
+    mapStyle: 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json',
     initialViewState: { longitude: -1.6, latitude: 52.6, zoom: 6.2, pitch: 0, bearing: 0 },
     controller: true,
     layers: [layer],

@@ -4,9 +4,6 @@
     <meta charset="utf-8">
     <title>Wet Woodland Distribution in England</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <script src="https://unpkg.com/deck.gl@latest/dist.min.js"></script>
-    <script src="https://unpkg.com/@deck.gl/aggregation-layers@latest/dist.min.js"></script>
-    <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
     <link href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css" rel="stylesheet">
     <style>
         body {
@@ -264,13 +261,13 @@
     <div id="loading">Loading wet woodland data...</div>
 
     <div id="view-toggle">
-        <button type="button" id="btn-hexagons" class="active">Density</button>
+        <button type="button" id="btn-raster" class="active">Extent</button>
+        <button type="button" id="btn-hexagons">Density</button>
         <button type="button" id="btn-polygons">LNRS Regions</button>
         <button type="button" id="btn-potential">Potential</button>
-        <button type="button" id="btn-raster">10m Raster</button>
     </div>
 
-    <div id="controls">
+    <div id="controls" style="display: none;">
         <h3>⚙️ Controls</h3>
         <div class="control-group">
             <label>
@@ -302,7 +299,7 @@
         </div>
     </div>
 
-    <div id="info">
+    <div id="info" style="display: none;">
         <h2>🌲 Wet Woodland Distribution</h2>
         <p style="margin-bottom: 12px; font-size: 12px;">3D hexagon visualization across England</p>
 
@@ -326,7 +323,7 @@
         <p style="margin: 3px 0; font-size: 12px;"><strong>Mean NN distance:</strong> 136.4 m</p>
     </div>
     <div id="legend">
-        <h3 id="legend-title">Wet Woodland Density</h3>
+        <h3 id="legend-title">Wet Woodland Extent</h3>
         <div id="landvalue-toggle" class="landvalue-toggle" style="display: none;">
             <span class="landvalue-label">Land value:</span>
             <button type="button" id="lv-12" class="active">1–2</button>
@@ -346,8 +343,14 @@
         <button type="button" class="close-popup" id="close-polygon-popup">Close</button>
     </div>
 
-    <script>
-        // Initial view state (centered on England)
+    <script type="module">
+        import maplibregl from 'https://esm.sh/maplibre-gl@3.6.2';
+        import { LightingEffect } from 'https://esm.sh/@deck.gl/core@9.2.7?bundle';
+        import { HeatmapLayer } from 'https://esm.sh/@deck.gl/aggregation-layers@9.2.7?bundle';
+        import { TileLayer } from 'https://esm.sh/@deck.gl/geo-layers@9.2.7?bundle';
+        import { GeoJsonLayer, BitmapLayer } from 'https://esm.sh/@deck.gl/layers@9.2.7?bundle';
+        import { MapboxOverlay } from 'https://esm.sh/@deck.gl/mapbox@9.2.7?bundle';
+
         const INITIAL_VIEW_STATE = {
             latitude: 52.5,
             longitude: -1.5,
@@ -356,6 +359,7 @@
             bearing: 0
         };
 
+        const LIGHT_STYLE_URL = 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json';
         const DENSITY_GRADIENT = `linear-gradient(to right,
             rgb(1, 152, 189),
             rgb(73, 227, 206),
@@ -364,165 +368,292 @@
             rgb(254, 173, 84),
             rgb(209, 55, 78)
         )`;
-        const PLASMA_GRADIENT = `linear-gradient(to right,
-            rgb(13, 8, 135),
-            rgb(84, 2, 163),
-            rgb(139, 10, 165),
-            rgb(185, 50, 137),
-            rgb(219, 92, 104),
-            rgb(244, 136, 73),
-            rgb(254, 188, 43),
-            rgb(240, 249, 33)
+        const VIRIDIS_GRADIENT = `linear-gradient(to right,
+            rgb(68, 1, 84),
+            rgb(72, 40, 120),
+            rgb(62, 74, 137),
+            rgb(49, 104, 142),
+            rgb(38, 130, 142),
+            rgb(31, 158, 137),
+            rgb(53, 183, 121),
+            rgb(109, 205, 89),
+            rgb(180, 222, 44),
+            rgb(253, 231, 37)
         )`;
-        const COG_URL = './wetwoodland_probability.cog.bin';
+        const COG_URL = './wetwoodland_extent_b2.cog.bin';
 
-        // Control state
         let heightExponent = 1.0;
         let layerOpacity = 0.5;
         let minPixelCount = 1;
         let maxPixelCount = Infinity;
-        let viewMode = 'hexagons';  // 'hexagons' | 'polygons' | 'potential' | 'raster'
+        let viewMode = 'raster';
         let hexagonData = null;
         let polygonData = null;
-        let potentialPoints = null;  // [lon, lat, value] or [lon, lat, value, landClass] for HeatmapLayer
-        let potentialLandValueClass = 0;  // 0=1-2, 1=3, 2=4-5 (only used when points have 4 elements)
+        let potentialPoints = null;
+        let potentialLandValueClass = 0;
         let polygonMinDensity = 0;
         let polygonMaxDensity = 1;
         let maxCount = 0;
         let minCount = 0;
-        let deckgl = null;
+        let map = null;
+        let deckOverlay = null;
         let cogLayer = null;
         let cogReady = false;
+        let previousPerspectiveView = {
+            pitch: INITIAL_VIEW_STATE.pitch,
+            bearing: INITIAL_VIEW_STATE.bearing
+        };
 
-        const DENSITY_COLOR_RANGE = [[1,152,189],[73,227,206],[216,254,181],[254,237,177],[254,173,84],[209,55,78]];
+        const DENSITY_COLOR_RANGE = [[1, 152, 189], [73, 227, 206], [216, 254, 181], [254, 237, 177], [254, 173, 84], [209, 55, 78]];
         const POTENTIAL_COLOR_RANGE = DENSITY_COLOR_RANGE.map((c, i) => {
-            // Keep low-suitability blue/cyan visible on the basemap while still tapering the ramp.
             const alphaRamp = [72, 96, 128, 164, 200, 230];
             return [...c, alphaRamp[i]];
         });
+        const VIRIDIS_LUT = (() => {
+            const stops = [
+                [0.00, [68, 1, 84, 0]],
+                [0.03, [68, 1, 84, 50]],
+                [0.13, [72, 40, 120, 118]],
+                [0.25, [62, 74, 137, 150]],
+                [0.38, [49, 104, 142, 180]],
+                [0.50, [38, 130, 142, 200]],
+                [0.63, [31, 158, 137, 214]],
+                [0.75, [53, 183, 121, 226]],
+                [0.88, [109, 205, 89, 234]],
+                [1.00, [253, 231, 37, 242]]
+            ];
+            const values = new Uint8ClampedArray(256 * 4);
+            for (let i = 0; i < 256; i++) {
+                const t = i / 255;
+                let stop0 = stops[0];
+                let stop1 = stops[1];
+                for (let j = 1; j < stops.length; j++) {
+                    if (t <= stops[j][0]) {
+                        stop0 = stops[j - 1];
+                        stop1 = stops[j];
+                        break;
+                    }
+                    stop0 = stops[j];
+                    stop1 = stops[j];
+                }
+                const blend = stop0[0] === stop1[0] ? 1 : (t - stop0[0]) / (stop1[0] - stop0[0]);
+                for (let c = 0; c < 4; c++) {
+                    values[i * 4 + c] = Math.round(stop0[1][c] + blend * (stop1[1][c] - stop0[1][c]));
+                }
+            }
+            return values;
+        })();
+        const VIRIDIS_LUT_IMAGE = new ImageData(VIRIDIS_LUT, 256, 1);
+
+        const WEB_MERCATOR_RADIUS = 6378137;
+        const lonToMercator = (lon) => lon * Math.PI * WEB_MERCATOR_RADIUS / 180;
+        const latToMercator = (lat) => Math.log(Math.tan(Math.PI / 4 + lat * Math.PI / 360)) * WEB_MERCATOR_RADIUS;
 
         function densityToColor(value, minVal, maxVal, alpha = 200) {
             const range = maxVal - minVal;
             const normalized = range <= 0 ? 0 : (value - minVal) / range;
             const position = Math.max(0, Math.min(1, normalized)) * (DENSITY_COLOR_RANGE.length - 1);
-            const i = Math.floor(position);
-            const j = Math.min(i + 1, DENSITY_COLOR_RANGE.length - 1);
-            const t = position - i;
-            const c = (idx) => Math.floor(DENSITY_COLOR_RANGE[i][idx] + (DENSITY_COLOR_RANGE[j][idx] - DENSITY_COLOR_RANGE[i][idx]) * t);
-            return [c(0), c(1), c(2), alpha];
+            const low = Math.floor(position);
+            const high = Math.min(low + 1, DENSITY_COLOR_RANGE.length - 1);
+            const blend = position - low;
+            const channel = (index) => Math.floor(
+                DENSITY_COLOR_RANGE[low][index] + (DENSITY_COLOR_RANGE[high][index] - DENSITY_COLOR_RANGE[low][index]) * blend
+            );
+            return [channel(0), channel(1), channel(2), alpha];
         }
 
-        // Plasma colormap LUT (256 entries, matches PLASMA_GRADIENT)
-        const PLASMA_LUT = (() => {
-            const S = [
-                [0.00,[13,8,135,0]],[0.03,[13,8,135,50]],[0.14,[84,2,163,130]],
-                [0.29,[139,10,165,170]],[0.43,[185,50,137,200]],[0.57,[219,92,104,215]],
-                [0.71,[244,136,73,225]],[0.86,[254,188,43,232]],[1.00,[240,249,33,240]]
-            ];
-            const a = new Uint8ClampedArray(256*4);
-            for (let i = 0; i < 256; i++) {
-                const t = i/255;
-                let s0=S[0], s1=S[1];
-                for (let j=1;j<S.length;j++) { if(t<=S[j][0]){s0=S[j-1];s1=S[j];break;} s0=S[j];s1=S[j]; }
-                const f = s0[0]===s1[0] ? 1 : (t-s0[0])/(s1[0]-s0[0]);
-                for (let c=0;c<4;c++) a[i*4+c]=Math.round(s0[1][c]+f*(s1[1][c]-s0[1][c]));
-            }
-            return a;
-        })();
+        async function buildNativeCogLayer() {
+            const [{ COGLayer }, { CreateTexture, Colormap, FilterNoDataVal }] = await Promise.all([
+                import('https://esm.sh/@developmentseed/deck.gl-geotiff@0.3.0?bundle'),
+                import('https://esm.sh/@developmentseed/deck.gl-raster@0.3.0?bundle')
+            ]);
+            return new COGLayer({
+                id: 'wet-woodland-band-2-cog',
+                geotiff: COG_URL,
+                maxRequests: 8,
+                renderTile: (texture) => [
+                    { module: CreateTexture, props: { textureName: texture } },
+                    { module: Colormap, props: { colormapTexture: VIRIDIS_LUT_IMAGE } },
+                    { module: FilterNoDataVal, props: { value: 255 } }
+                ]
+            });
+        }
 
-        const _R = 6378137;
-        const _lonToM = lon => lon * Math.PI * _R / 180;
-        const _latToM = lat => Math.log(Math.tan(Math.PI/4 + lat*Math.PI/360)) * _R;
-
-        async function ensureCogLayer() {
-            if (cogReady) return;
+        async function buildFallbackCogLayer() {
             const { fromUrl } = await import('https://esm.sh/geotiff@2.1.3');
-            const TILE_SIZE = 256;
+            const tileSize = 256;
             const tiff = await fromUrl(COG_URL);
             const imageCount = await tiff.getImageCount();
-            const imgCache = new Array(imageCount);
-            async function getImg(i) {
-                if (!imgCache[i]) imgCache[i] = await tiff.getImage(i);
-                return imgCache[i];
+            const imageCache = new Array(imageCount);
+
+            async function getImage(index) {
+                if (!imageCache[index]) imageCache[index] = await tiff.getImage(index);
+                return imageCache[index];
             }
-            const base    = await getImg(0);
-            const cogBbox = base.getBoundingBox();
-            const spanX   = cogBbox[2] - cogBbox[0];
-            const spanY   = cogBbox[3] - cogBbox[1];
-            const ovMeta  = [];
+
+            const base = await getImage(0);
+            const bounds = base.getBoundingBox();
+            const spanX = bounds[2] - bounds[0];
+            const spanY = bounds[3] - bounds[1];
+            const overviews = [];
+
             for (let i = 0; i < imageCount; i++) {
-                const img = await getImg(i);
-                ovMeta.push({ i, res: spanX / img.getWidth(), w: img.getWidth(), h: img.getHeight() });
+                const image = await getImage(i);
+                overviews.push({
+                    index: i,
+                    resolution: spanX / image.getWidth(),
+                    width: image.getWidth(),
+                    height: image.getHeight()
+                });
             }
-            ovMeta.sort((a, b) => a.res - b.res);
-            function pickOv(targetRes) {
-                let pick = ovMeta[0];
-                for (const m of ovMeta) { if (m.res <= 2*targetRes) pick=m; else break; }
-                return pick;
-            }
-            const lut = PLASMA_LUT;
-            async function getTileData({ bbox }) {
-                const west=_lonToM(bbox.west), east=_lonToM(bbox.east);
-                const north=_latToM(bbox.north), south=_latToM(bbox.south);
-                if (east<=cogBbox[0]||west>=cogBbox[2]||north<=cogBbox[1]||south>=cogBbox[3]) return null;
-                const meta = pickOv((east-west)/TILE_SIZE);
-                const img  = await getImg(meta.i);
-                const resX = spanX/meta.w, resY = spanY/meta.h;
-                const wx0=Math.max(0,     Math.floor((west -cogBbox[0])/resX));
-                const wx1=Math.min(meta.w,Math.ceil ((east -cogBbox[0])/resX));
-                const wy0=Math.max(0,     Math.floor((cogBbox[3]-north)/resY));
-                const wy1=Math.min(meta.h,Math.ceil ((cogBbox[3]-south)/resY));
-                if (wx1<=wx0||wy1<=wy0) return null;
-                let rasters;
-                try { rasters = await img.readRasters({window:[wx0,wy0,wx1,wy1],width:TILE_SIZE,height:TILE_SIZE}); }
-                catch { return null; }
-                const band = rasters[0];
-                const rgba = new Uint8ClampedArray(TILE_SIZE*TILE_SIZE*4);
-                for (let i=0; i<TILE_SIZE*TILE_SIZE; i++) {
-                    const v = band[i];
-                    if (v>=255) continue;
-                    const idx = Math.min(255,Math.round(v*255/254))*4;
-                    rgba[i*4]=lut[idx]; rgba[i*4+1]=lut[idx+1]; rgba[i*4+2]=lut[idx+2]; rgba[i*4+3]=lut[idx+3];
+
+            overviews.sort((a, b) => a.resolution - b.resolution);
+
+            function pickOverview(targetResolution) {
+                let selected = overviews[0];
+                for (const overview of overviews) {
+                    if (overview.resolution <= 2 * targetResolution) selected = overview;
+                    else break;
                 }
+                return selected;
+            }
+
+            async function getTileData({ bbox }) {
+                const west = lonToMercator(bbox.west);
+                const east = lonToMercator(bbox.east);
+                const north = latToMercator(bbox.north);
+                const south = latToMercator(bbox.south);
+
+                if (east <= bounds[0] || west >= bounds[2] || north <= bounds[1] || south >= bounds[3]) {
+                    return null;
+                }
+
+                const overview = pickOverview((east - west) / tileSize);
+                const image = await getImage(overview.index);
+                const resX = spanX / overview.width;
+                const resY = spanY / overview.height;
+                const windowX0 = Math.max(0, Math.floor((west - bounds[0]) / resX));
+                const windowX1 = Math.min(overview.width, Math.ceil((east - bounds[0]) / resX));
+                const windowY0 = Math.max(0, Math.floor((bounds[3] - north) / resY));
+                const windowY1 = Math.min(overview.height, Math.ceil((bounds[3] - south) / resY));
+
+                if (windowX1 <= windowX0 || windowY1 <= windowY0) return null;
+
+                let rasters;
+                try {
+                    rasters = await image.readRasters({
+                        window: [windowX0, windowY0, windowX1, windowY1],
+                        width: tileSize,
+                        height: tileSize
+                    });
+                } catch {
+                    return null;
+                }
+
+                const band = rasters[0];
+                const rgba = new Uint8ClampedArray(tileSize * tileSize * 4);
+
+                for (let i = 0; i < tileSize * tileSize; i++) {
+                    const value = band[i];
+                    if (value >= 255) continue;
+                    const lutIndex = Math.min(255, Math.round(value * 255 / 254)) * 4;
+                    rgba[i * 4] = VIRIDIS_LUT[lutIndex];
+                    rgba[i * 4 + 1] = VIRIDIS_LUT[lutIndex + 1];
+                    rgba[i * 4 + 2] = VIRIDIS_LUT[lutIndex + 2];
+                    rgba[i * 4 + 3] = VIRIDIS_LUT[lutIndex + 3];
+                }
+
                 const canvas = document.createElement('canvas');
-                canvas.width = canvas.height = TILE_SIZE;
-                canvas.getContext('2d').putImageData(new ImageData(rgba,TILE_SIZE,TILE_SIZE),0,0);
+                canvas.width = tileSize;
+                canvas.height = tileSize;
+                canvas.getContext('2d').putImageData(new ImageData(rgba, tileSize, tileSize), 0, 0);
                 return canvas;
             }
-            cogLayer = new deck.TileLayer({
-                id: 'probability-cog',
+
+            return new TileLayer({
+                id: 'wet-woodland-band-2-cog-fallback',
                 getTileData,
-                tileSize: TILE_SIZE,
+                tileSize,
                 maxRequests: 6,
                 minZoom: 4,
                 maxZoom: 16,
                 renderSubLayers(props) {
                     if (!props.data) return null;
-                    const {west,south,east,north} = props.tile.bbox;
-                    return new deck.BitmapLayer({...props, data:null, image:props.data, bounds:[west,south,east,north]});
+                    const { west, south, east, north } = props.tile.bbox;
+                    return new BitmapLayer({
+                        ...props,
+                        data: null,
+                        image: props.data,
+                        bounds: [west, south, east, north]
+                    });
                 }
             });
+        }
+
+        async function ensureCogLayer() {
+            if (cogReady) return;
+            try {
+                cogLayer = await buildNativeCogLayer();
+            } catch (error) {
+                console.warn('COGLayer unavailable, falling back to manual COG tiling.', error);
+                cogLayer = await buildFallbackCogLayer();
+            }
             cogReady = true;
         }
 
-        // Format polygon popup: selected stats only, bold label on left like density info pane
+        async function activateRasterView({ fallbackToHexagons = false } = {}) {
+            if (cogReady) {
+                document.getElementById('loading').style.display = 'none';
+                setViewMode('raster');
+                return true;
+            }
+
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('loading').textContent = 'Loading full-resolution band 2 COG...';
+
+            try {
+                await ensureCogLayer();
+                document.getElementById('loading').style.display = 'none';
+                setViewMode('raster');
+                return true;
+            } catch (error) {
+                console.error(error);
+                if (fallbackToHexagons) setViewMode('hexagons');
+                document.getElementById('loading').textContent = fallbackToHexagons
+                    ? '❌ Failed to load band 2 COG. Switched to Density.'
+                    : '❌ Failed to load band 2 COG: ' + error.message;
+                return false;
+            }
+        }
+
         function formatPolygonPopup(props) {
-            const fmt = (v) => v == null || v === '' ? null : (typeof v === 'number' ? (Number.isInteger(v) ? v.toLocaleString() : v.toFixed(2)) : String(v));
-            const pctFmt = (v) => v != null && v !== '' ? (typeof v === 'number' ? v.toFixed(1) : String(v)) : null;
+            const formatValue = (value) => {
+                if (value == null || value === '') return null;
+                return typeof value === 'number'
+                    ? (Number.isInteger(value) ? value.toLocaleString() : value.toFixed(2))
+                    : String(value);
+            };
+            const formatPercent = (value) => value != null && value !== ''
+                ? (typeof value === 'number' ? value.toFixed(1) : String(value))
+                : null;
+
             const rows = [];
-            const ha = props.total_area_ha;
-            const regionHa = props.region_area_ha;
-            const pctOfRegion = (ha != null && regionHa != null && regionHa > 0) ? ((ha / regionHa) * 100).toFixed(2) + '%' : null;
-            if (fmt(props.LNRS_ID)) rows.push({ key: 'LNRS ID', val: fmt(props.LNRS_ID) });
-            if (fmt(props.Resp_Auth)) rows.push({ key: 'Responsible Authority', val: fmt(props.Resp_Auth) });
-            if (fmt(ha)) rows.push({ key: 'Total wet woodland (ha)', val: fmt(ha) });
-            if (pctOfRegion) rows.push({ key: 'Wet woodland % of region', val: pctOfRegion });
-            if (fmt(props.forest_cover_pct)) rows.push({ key: 'Forest cover %', val: fmt(props.forest_cover_pct) });
-            if (fmt(props.on_peat_pct)) rows.push({ key: 'On peat %', val: fmt(props.on_peat_pct) });
-            if (fmt(props.effective_mesh_size_ha)) rows.push({ key: 'Effective mesh size (ha)', val: fmt(props.effective_mesh_size_ha) });
-            if (fmt(props.mean_nn_m)) rows.push({ key: 'Mean NN distance (m)', val: fmt(props.mean_nn_m) });
-            if (fmt(props.num_patches)) rows.push({ key: 'Number of patches', val: fmt(props.num_patches) });
-            // Patch distribution (same bands as national; omit ≤ 0.01 ha so LNRS matches national 0 ha)
+            const totalAreaHa = props.total_area_ha;
+            const regionAreaHa = props.region_area_ha;
+            const percentOfRegion = (totalAreaHa != null && regionAreaHa != null && regionAreaHa > 0)
+                ? ((totalAreaHa / regionAreaHa) * 100).toFixed(2) + '%'
+                : null;
+
+            if (formatValue(props.LNRS_ID)) rows.push({ key: 'LNRS ID', val: formatValue(props.LNRS_ID) });
+            if (formatValue(props.Resp_Auth)) rows.push({ key: 'Responsible Authority', val: formatValue(props.Resp_Auth) });
+            if (formatValue(totalAreaHa)) rows.push({ key: 'Total wet woodland (ha)', val: formatValue(totalAreaHa) });
+            if (percentOfRegion) rows.push({ key: 'Wet woodland % of region', val: percentOfRegion });
+            if (formatValue(props.forest_cover_pct)) rows.push({ key: 'Forest cover %', val: formatValue(props.forest_cover_pct) });
+            if (formatValue(props.on_peat_pct)) rows.push({ key: 'On peat %', val: formatValue(props.on_peat_pct) });
+            if (formatValue(props.effective_mesh_size_ha)) rows.push({ key: 'Effective mesh size (ha)', val: formatValue(props.effective_mesh_size_ha) });
+            if (formatValue(props.mean_nn_m)) rows.push({ key: 'Mean NN distance (m)', val: formatValue(props.mean_nn_m) });
+            if (formatValue(props.num_patches)) rows.push({ key: 'Number of patches', val: formatValue(props.num_patches) });
+
             const bands = [
                 { key: '0.01-0.1 ha', pct: props.pct_0_01_0_1, area: props.area_0_01_0_1_ha },
                 { key: '0.1-1 ha', pct: props.pct_0_1_1, area: props.area_0_1_1_ha },
@@ -530,44 +661,57 @@
                 { key: '5-10 ha', pct: props.pct_5_10, area: props.area_5_10_ha },
                 { key: '≥ 10 ha', pct: props.pct_gte_10, area: props.area_gte_10_ha }
             ];
-            const hasPatchData = bands.some(b => (b.pct != null && b.pct !== '') || (b.area != null && b.area !== ''));
+            const hasPatchData = bands.some((band) => (band.pct != null && band.pct !== '') || (band.area != null && band.area !== ''));
+
             if (hasPatchData) {
                 rows.push({ divider: true });
                 rows.push({ section: 'Patch Distribution' });
-                bands.forEach(b => {
-                    const pct = pctFmt(b.pct);
-                    const areaHa = fmt(b.area);
-                    const val = [pct ? pct + '%' : null, areaHa ? areaHa + ' ha' : null].filter(Boolean).join(' — ');
-                    if (val) rows.push({ key: b.key + ':', val });
+                bands.forEach((band) => {
+                    const pct = formatPercent(band.pct);
+                    const area = formatValue(band.area);
+                    const value = [pct ? pct + '%' : null, area ? area + ' ha' : null].filter(Boolean).join(' — ');
+                    if (value) rows.push({ key: band.key + ':', val: value });
                 });
-                const med = fmt(props.median_patch_ha);
-                const large = fmt(props.largest_patch_ha);
-                if (med || large) rows.push({ key: 'Median | Largest', val: [med ? med + ' ha' : '', large ? large + ' ha' : ''].filter(Boolean).join(' | ') });
+
+                const medianPatch = formatValue(props.median_patch_ha);
+                const largestPatch = formatValue(props.largest_patch_ha);
+                if (medianPatch || largestPatch) {
+                    rows.push({
+                        key: 'Median | Largest',
+                        val: [medianPatch ? medianPatch + ' ha' : '', largestPatch ? largestPatch + ' ha' : '']
+                            .filter(Boolean)
+                            .join(' | ')
+                    });
+                }
             } else {
-                if (fmt(props.largest_patch_ha)) rows.push({ key: 'Largest patch (ha)', val: fmt(props.largest_patch_ha) });
-                if (fmt(props.median_patch_ha)) rows.push({ key: 'Median patch (ha)', val: fmt(props.median_patch_ha) });
+                if (formatValue(props.largest_patch_ha)) rows.push({ key: 'Largest patch (ha)', val: formatValue(props.largest_patch_ha) });
+                if (formatValue(props.median_patch_ha)) rows.push({ key: 'Median patch (ha)', val: formatValue(props.median_patch_ha) });
             }
-            // Suitability for restoration — prefer grade split, else show report-based total
-            const s12 = props.suitable_ha_grade_12, s3 = props.suitable_ha_grade_3, s45 = props.suitable_ha_grade_45;
-            const sTotal = props.suitable_area_ha;
-            const sOnPeat = props.suitable_on_peat_area_ha;
-            const sOffPeat = props.suitable_off_peat_area_ha;
-            const sPct = props.suitable_pct_of_valid;
-            const sThreshold = props.suitable_threshold;
-            if (s12 != null || s3 != null || s45 != null || sTotal != null) {
+
+            const suitable12 = props.suitable_ha_grade_12;
+            const suitable3 = props.suitable_ha_grade_3;
+            const suitable45 = props.suitable_ha_grade_45;
+            const suitableTotal = props.suitable_area_ha;
+            const suitableOnPeat = props.suitable_on_peat_area_ha;
+            const suitableOffPeat = props.suitable_off_peat_area_ha;
+            const suitablePct = props.suitable_pct_of_valid;
+            const suitableThreshold = props.suitable_threshold;
+
+            if (suitable12 != null || suitable3 != null || suitable45 != null || suitableTotal != null) {
                 rows.push({ divider: true });
                 rows.push({ section: 'Suitability for restoration' });
-                if (fmt(s12) != null) rows.push({ key: 'Agricultural Grade 1–2 (ha)', val: fmt(s12) });
-                if (fmt(s3) != null) rows.push({ key: 'Agricultural Grade 3 (ha)', val: fmt(s3) });
-                if (fmt(s45) != null) rows.push({ key: 'Agricultural Grade 4–5 (ha)', val: fmt(s45) });
-                if (fmt(sTotal) != null && (s12 == null && s3 == null && s45 == null)) {
-                    rows.push({ key: 'Total suitable area (ha)', val: fmt(sTotal) });
-                    if (fmt(sOnPeat) != null) rows.push({ key: 'Suitable on peat (ha)', val: fmt(sOnPeat) });
-                    if (fmt(sOffPeat) != null) rows.push({ key: 'Suitable off peat (ha)', val: fmt(sOffPeat) });
-                    if (fmt(sPct) != null) rows.push({ key: 'Suitable % of valid', val: fmt(sPct) + '%' });
-                    if (fmt(sThreshold) != null) rows.push({ key: 'Suitability threshold', val: '≥ ' + fmt(sThreshold) });
+                if (formatValue(suitable12) != null) rows.push({ key: 'Agricultural Grade 1–2 (ha)', val: formatValue(suitable12) });
+                if (formatValue(suitable3) != null) rows.push({ key: 'Agricultural Grade 3 (ha)', val: formatValue(suitable3) });
+                if (formatValue(suitable45) != null) rows.push({ key: 'Agricultural Grade 4–5 (ha)', val: formatValue(suitable45) });
+                if (formatValue(suitableTotal) != null && (suitable12 == null && suitable3 == null && suitable45 == null)) {
+                    rows.push({ key: 'Total suitable area (ha)', val: formatValue(suitableTotal) });
+                    if (formatValue(suitableOnPeat) != null) rows.push({ key: 'Suitable on peat (ha)', val: formatValue(suitableOnPeat) });
+                    if (formatValue(suitableOffPeat) != null) rows.push({ key: 'Suitable off peat (ha)', val: formatValue(suitableOffPeat) });
+                    if (formatValue(suitablePct) != null) rows.push({ key: 'Suitable % of valid', val: formatValue(suitablePct) + '%' });
+                    if (formatValue(suitableThreshold) != null) rows.push({ key: 'Suitability threshold', val: '≥ ' + formatValue(suitableThreshold) });
                 }
             }
+
             return rows;
         }
 
@@ -577,10 +721,10 @@
             document.getElementById('polygon-popup-title').textContent = title;
             const body = document.getElementById('polygon-popup-body');
             body.innerHTML = formatPolygonPopup(object.properties)
-                .map(r => {
-                    if (r.divider) return `<hr class="popup-section-divider" />`;
-                    if (r.section) return `<p class="polygon-popup-section">${r.section}</p>`;
-                    return `<div class="attr-row"><strong class="attr-key">${r.key}</strong><span class="attr-val">${r.val}</span></div>`;
+                .map((row) => {
+                    if (row.divider) return '<hr class="popup-section-divider" />';
+                    if (row.section) return `<p class="polygon-popup-section">${row.section}</p>`;
+                    return `<div class="attr-row"><strong class="attr-key">${row.key}</strong><span class="attr-val">${row.val}</span></div>`;
                 })
                 .join('');
             document.getElementById('polygon-popup').classList.add('visible');
@@ -595,7 +739,7 @@
             const legendGradient = document.querySelector('.legend-gradient');
             const legendLabels = document.querySelector('.legend-labels');
             const hasLandValueClasses = potentialPoints && potentialPoints.length > 0 && potentialPoints[0].length === 4;
-            const lvNames = ['Grade 1–2', 'Grade 3', 'Grade 4–5'];
+            const landValueNames = ['Grade 1–2', 'Grade 3', 'Grade 4–5'];
 
             if (mode === 'hexagons') {
                 legendTitle.textContent = 'Wet Woodland Density';
@@ -615,7 +759,7 @@
 
             if (mode === 'potential') {
                 legendTitle.textContent = hasLandValueClasses
-                    ? 'Restoration suitability — ' + lvNames[potentialLandValueClass]
+                    ? 'Restoration suitability — ' + landValueNames[potentialLandValueClass]
                     : 'Restoration suitability (0.15 – 1)';
                 legendGradient.style.background = DENSITY_GRADIENT;
                 legendLabels.innerHTML = '<span>Low</span><span>High</span>';
@@ -628,33 +772,65 @@
                 return;
             }
 
-            legendTitle.textContent = 'Wet woodland probability (10m)';
-            legendGradient.style.background = PLASMA_GRADIENT;
+            legendTitle.textContent = 'Wet woodland extent — band 2';
+            legendGradient.style.background = VIRIDIS_GRADIENT;
             legendLabels.innerHTML = '<span>Low</span><span>High</span>';
             document.getElementById('landvalue-toggle').style.display = 'none';
         }
 
+        function setRotationEnabled(enabled) {
+            if (!map) return;
+            if (enabled) {
+                map.dragRotate.enable();
+                map.touchZoomRotate.enableRotation();
+            } else {
+                map.dragRotate.disable();
+                map.touchZoomRotate.disableRotation();
+            }
+        }
+
         function setViewMode(mode) {
+            const previousMode = viewMode;
             viewMode = mode;
+
             document.getElementById('btn-hexagons').classList.toggle('active', mode === 'hexagons');
             document.getElementById('btn-polygons').classList.toggle('active', mode === 'polygons');
             document.getElementById('btn-potential').classList.toggle('active', mode === 'potential');
             document.getElementById('btn-raster').classList.toggle('active', mode === 'raster');
             document.getElementById('controls').style.display = mode === 'hexagons' ? 'block' : 'none';
             document.getElementById('legend').style.display = 'block';
-            applyLegendStyle(mode);
             document.getElementById('info').style.display = mode === 'hexagons' ? 'block' : 'none';
-            if (mode === 'polygons') hidePolygonPopup();
-            if (mode !== 'polygons') hidePolygonPopup();
+            applyLegendStyle(mode);
+            hidePolygonPopup();
+
+            if (map && mode === 'raster') {
+                const pitch = map.getPitch();
+                const bearing = map.getBearing();
+                if (previousMode !== 'raster' && (Math.abs(pitch) > 0.01 || Math.abs(bearing) > 0.01)) {
+                    previousPerspectiveView = { pitch, bearing };
+                }
+                setRotationEnabled(false);
+                map.easeTo({ pitch: 0, bearing: 0, duration: 450 });
+            } else if (map) {
+                setRotationEnabled(true);
+                if (previousMode === 'raster' && mode === 'hexagons') {
+                    map.easeTo({
+                        pitch: previousPerspectiveView.pitch,
+                        bearing: previousPerspectiveView.bearing,
+                        duration: 450
+                    });
+                }
+            }
+
             updateLayers();
         }
 
         function getLayers() {
             if (viewMode === 'hexagons' && hexagonData) {
-                const filteredFeatures = hexagonData.features.filter(f =>
-                    f.properties.count > minPixelCount && f.properties.count <= maxPixelCount
+                const filteredFeatures = hexagonData.features.filter((feature) =>
+                    feature.properties.count > minPixelCount && feature.properties.count <= maxPixelCount
                 );
-                return [new deck.GeoJsonLayer({
+                return [new GeoJsonLayer({
                     id: 'wet-woodland-hexagons',
                     data: { type: 'FeatureCollection', features: filteredFeatures },
                     opacity: layerOpacity,
@@ -664,22 +840,23 @@
                     wireframe: false,
                     lineWidthMinPixels: 0.5,
                     material: { ambient: 0.35, diffuse: 0.6, shininess: 32, specularColor: [60, 60, 60] },
-                    getElevation: f => Math.pow(f.properties.count, heightExponent) * 50,
-                    getFillColor: f => densityToColor(f.properties.count, minCount, maxCount),
+                    getElevation: (feature) => Math.pow(feature.properties.count, heightExponent) * 50,
+                    getFillColor: (feature) => densityToColor(feature.properties.count, minCount, maxCount),
                     getLineColor: [80, 80, 80, 100],
                     pickable: true,
                     autoHighlight: true,
                     highlightColor: [255, 255, 255, 100]
                 })];
             }
+
             if (viewMode === 'polygons' && polygonData) {
-                return [new deck.GeoJsonLayer({
+                return [new GeoJsonLayer({
                     id: 'wet-woodland-lnrs-regions',
                     data: polygonData,
                     stroked: true,
                     filled: true,
                     extruded: false,
-                    getFillColor: f => densityToColor(f.properties.total_area_ha ?? 0, polygonMinDensity, polygonMaxDensity, 128),
+                    getFillColor: (feature) => densityToColor(feature.properties.total_area_ha ?? 0, polygonMinDensity, polygonMaxDensity, 128),
                     getLineColor: [0, 0, 0, 255],
                     lineWidthMinPixels: 1,
                     pickable: true,
@@ -687,17 +864,20 @@
                     highlightColor: [255, 255, 255, 80]
                 })];
             }
+
             if (viewMode === 'potential' && potentialPoints && potentialPoints.length > 0) {
                 const hasClass = potentialPoints[0].length === 4;
                 const data = hasClass
-                    ? potentialPoints.filter(d => d[3] === potentialLandValueClass)
+                    ? potentialPoints.filter((point) => point[3] === potentialLandValueClass)
                     : potentialPoints;
+
                 if (data.length === 0) return [];
-                return [new deck.HeatmapLayer({
+
+                return [new HeatmapLayer({
                     id: 'potential-heatmap',
-                    data: data,
-                    getPosition: d => [d[0], d[1]],
-                    getWeight: d => d[2],
+                    data,
+                    getPosition: (point) => [point[0], point[1]],
+                    getWeight: (point) => point[2],
                     radiusPixels: 25,
                     intensity: 1,
                     threshold: 0.03,
@@ -705,33 +885,57 @@
                     colorRange: POTENTIAL_COLOR_RANGE
                 })];
             }
+
             if (viewMode === 'raster' && cogLayer) return [cogLayer];
             return [];
         }
 
         function updateLayers() {
-            if (deckgl) deckgl.setProps({ layers: getLayers() });
+            if (deckOverlay) deckOverlay.setProps({ layers: getLayers() });
         }
 
-        // Load hexagon data first, then init map
+        function getTooltip({ object }) {
+            if (!object) return null;
+            if (viewMode === 'hexagons' && object.properties?.count != null) {
+                const count = object.properties.count;
+                const hectares = (count * 0.01).toFixed(2);
+                return {
+                    html: `<div style="background: rgba(0,0,0,0.9); padding: 10px; border-radius: 5px;"><strong>Wet Woodland:</strong> ${count.toLocaleString()} pixels<br><strong>Area:</strong> ${hectares} ha</div>`,
+                    style: { fontSize: '12px', color: 'white' }
+                };
+            }
+            if (viewMode === 'polygons' && object.properties) {
+                const name = object.properties.Name || object.properties.LNRS_ID || 'Region';
+                return {
+                    html: `<div style="background: rgba(0,0,0,0.9); padding: 10px; border-radius: 5px;"><strong>${name}</strong><br>Click for details</div>`,
+                    style: { fontSize: '12px', color: 'white' }
+                };
+            }
+            return null;
+        }
+
         fetch('wet_woodland_hexagons.geojson')
-            .then(response => response.json())
-            .then(data => {
+            .then((response) => response.json())
+            .then((data) => {
                 hexagonData = data;
-                const counts = data.features.map(f => f.properties.count);
+                const counts = data.features.map((feature) => feature.properties.count);
                 maxCount = counts.reduce((a, b) => Math.max(a, b), 0);
                 minCount = counts.reduce((a, b) => Math.min(a, b), Infinity);
-                document.getElementById('loading').style.display = 'none';
 
-                deckgl = new deck.DeckGL({
+                map = new maplibregl.Map({
                     container: 'map',
-                    mapLib: maplibregl,
-                    mapStyle: 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json',
-                    initialViewState: INITIAL_VIEW_STATE,
-                    controller: true,
+                    style: LIGHT_STYLE_URL,
+                    center: [INITIAL_VIEW_STATE.longitude, INITIAL_VIEW_STATE.latitude],
+                    zoom: INITIAL_VIEW_STATE.zoom,
+                    pitch: INITIAL_VIEW_STATE.pitch,
+                    bearing: INITIAL_VIEW_STATE.bearing
+                });
+
+                deckOverlay = new MapboxOverlay({
+                    interleaved: false,
                     layers: getLayers(),
                     effects: [
-                        new deck.LightingEffect({
+                        new LightingEffect({
                             ambient: { color: [255, 255, 255], intensity: 1.0 },
                             directional: [
                                 { color: [255, 255, 255], intensity: 1.0, direction: [-3, -9, -1] },
@@ -739,163 +943,157 @@
                             ]
                         })
                     ],
-                    parameters: { clearColor: [0.07, 0.14, 0.19, 1] },
-                    getTooltip: ({ object }) => {
-                        if (!object) return null;
-                        if (viewMode === 'hexagons' && object.properties.count != null) {
-                            const count = object.properties.count;
-                            const hectares = (count * 0.01).toFixed(2);
-                            return { html: `<div style="background: rgba(0,0,0,0.9); padding: 10px; border-radius: 5px;"><strong>Wet Woodland:</strong> ${count.toLocaleString()} pixels<br><strong>Area:</strong> ${hectares} ha</div>`, style: { fontSize: '12px', color: 'white' } };
-                        }
-                        if (viewMode === 'polygons' && object.properties) {
-                            const name = object.properties.Name || object.properties.LNRS_ID || 'Region';
-                            return { html: `<div style="background: rgba(0,0,0,0.9); padding: 10px; border-radius: 5px;"><strong>${name}</strong><br>Click for details</div>`, style: { fontSize: '12px', color: 'white' } };
-                        }
-                        return null;
-                    },
+                    parameters: { clearColor: [0, 0, 0, 0] },
+                    getTooltip,
                     onClick: ({ object }) => {
-                        if (viewMode === 'polygons' && object && object.properties) showPolygonPopup(object);
+                        if (viewMode === 'polygons' && object?.properties) showPolygonPopup(object);
                     }
                 });
 
-                const updateVisualization = () => deckgl.setProps({ layers: getLayers() });
+                map.addControl(deckOverlay);
+                map.on('load', async () => {
+                    await activateRasterView({ fallbackToHexagons: true });
+                    updateLayers();
+                });
 
-                document.getElementById('height-slider').addEventListener('input', (e) => {
-                    heightExponent = parseFloat(e.target.value) / 10;
+                const updateVisualization = () => updateLayers();
+
+                document.getElementById('height-slider').addEventListener('input', (event) => {
+                    heightExponent = parseFloat(event.target.value) / 10;
                     document.getElementById('height-value').textContent = heightExponent.toFixed(1) + 'x';
                     updateVisualization();
                 });
-                document.getElementById('opacity-slider').addEventListener('input', (e) => {
-                    layerOpacity = parseFloat(e.target.value) / 100;
+
+                document.getElementById('opacity-slider').addEventListener('input', (event) => {
+                    layerOpacity = parseFloat(event.target.value) / 100;
                     document.getElementById('opacity-value').textContent = layerOpacity.toFixed(2);
                     updateVisualization();
                 });
-                document.getElementById('min-count-slider').addEventListener('input', (e) => {
-                    minPixelCount = parseInt(e.target.value);
+
+                document.getElementById('min-count-slider').addEventListener('input', (event) => {
+                    minPixelCount = parseInt(event.target.value, 10);
                     document.getElementById('min-count-value').textContent = '>' + minPixelCount;
                     updateVisualization();
                 });
+
                 const maxCountSlider = document.getElementById('max-count-slider');
                 const maxCountValue = document.getElementById('max-count-value');
                 maxCountSlider.max = maxCount;
                 maxCountSlider.value = maxCount;
-                maxCountSlider.addEventListener('input', (e) => {
-                    const value = parseInt(e.target.value);
+                maxCountSlider.addEventListener('input', (event) => {
+                    const value = parseInt(event.target.value, 10);
                     maxPixelCount = value >= maxCount ? Infinity : value;
                     maxCountValue.textContent = maxPixelCount === Infinity ? 'No limit' : '≤' + maxPixelCount;
                     updateVisualization();
                 });
 
                 document.getElementById('btn-hexagons').addEventListener('click', () => setViewMode('hexagons'));
+
                 document.getElementById('btn-polygons').addEventListener('click', () => {
                     if (polygonData) {
                         setViewMode('polygons');
-                    } else {
-                        document.getElementById('loading').style.display = 'block';
-                        document.getElementById('loading').textContent = 'Loading LNRS regions...';
-                        fetch('wet_woodland_lnrs_regions.geojson')
-                            .then(r => r.json())
-                            .then(geo => {
-                                polygonData = geo;
-                                const densities = geo.features.map(f => f.properties.total_area_ha ?? 0);
-                                polygonMinDensity = densities.length ? Math.min(...densities) : 0;
-                                polygonMaxDensity = densities.length ? Math.max(...densities) : 1;
-                                if (polygonMaxDensity === polygonMinDensity) polygonMaxDensity = polygonMinDensity + 1;
-                                document.getElementById('loading').style.display = 'none';
-                                setViewMode('polygons');
-                            })
-                            .catch(err => {
-                                console.error(err);
-                                document.getElementById('loading').innerHTML = '❌ Error loading regions.';
-                            });
+                        return;
                     }
+
+                    document.getElementById('loading').style.display = 'block';
+                    document.getElementById('loading').textContent = 'Loading LNRS regions...';
+
+                    fetch('wet_woodland_lnrs_regions.geojson')
+                        .then((response) => response.json())
+                        .then((geojson) => {
+                            polygonData = geojson;
+                            const densities = geojson.features.map((feature) => feature.properties.total_area_ha ?? 0);
+                            polygonMinDensity = densities.length ? Math.min(...densities) : 0;
+                            polygonMaxDensity = densities.length ? Math.max(...densities) : 1;
+                            if (polygonMaxDensity === polygonMinDensity) polygonMaxDensity = polygonMinDensity + 1;
+                            document.getElementById('loading').style.display = 'none';
+                            setViewMode('polygons');
+                        })
+                        .catch((error) => {
+                            console.error(error);
+                            document.getElementById('loading').innerHTML = '❌ Error loading regions.';
+                        });
                 });
+
                 document.getElementById('btn-potential').addEventListener('click', () => {
                     if (potentialPoints) {
                         setViewMode('potential');
-                    } else {
-                        document.getElementById('loading').style.display = 'block';
-                        document.getElementById('loading').textContent = 'Loading potential layer...';
-                        const loadPotential = (points) => {
-                            potentialPoints = points;
-                            document.getElementById('loading').style.display = 'none';
-                            setViewMode('potential');
-                        };
-                        fetch('potential_points.bin')
-                            .then(r => r.ok ? r.arrayBuffer() : Promise.reject(new Error('no bin')))
-                            .then(buf => {
-                                const f32 = new Float32Array(buf);
-                                // 16 bytes/point = 4 floats (with land class); 12 bytes = 3 floats
-                                const nFloats = f32.length;
-                                const isClass = (v) => v >= 0 && v <= 2 && (v === 0 || v === 1 || v === 2 || Math.abs(v - Math.round(v)) < 1e-5);
-                                let is4Value = nFloats >= 4 && isClass(f32[3]);
-                                if (!is4Value && nFloats >= 16) {
-                                    const c1 = f32[3], c2 = f32[7], c3 = f32[11];
-                                    if (isClass(c1) && isClass(c2) && isClass(c3)) is4Value = true;
-                                }
-                                const stride = is4Value ? 4 : 3;
-                                const points = [];
-                                for (let i = 0; i < f32.length; i += stride) {
-                                    if (stride === 4) points.push([f32[i], f32[i+1], f32[i+2], f32[i+3]]);
-                                    else points.push([f32[i], f32[i+1], f32[i+2]]);
-                                }
-                                return points;
-                            })
-                            .then(loadPotential)
-                            .catch(() => fetch('potential_points.json').then(r => r.json()).then(loadPotential))
-                            .catch(err => {
-                                console.error(err);
-                                document.getElementById('loading').innerHTML = '❌ Missing potential layer. Run: python raster_potential_to_points.py --raster data/wet_woodland_potential.tif --output docs/potential_points.json';
-                            });
+                        return;
                     }
-                });
-                document.getElementById('btn-raster').addEventListener('click', async () => {
-                    if (cogReady) { setViewMode('raster'); return; }
+
                     document.getElementById('loading').style.display = 'block';
-                    document.getElementById('loading').textContent = 'Loading 10m probability raster...';
-                    try {
-                        await ensureCogLayer();
+                    document.getElementById('loading').textContent = 'Loading potential layer...';
+
+                    const loadPotential = (points) => {
+                        potentialPoints = points;
                         document.getElementById('loading').style.display = 'none';
-                        setViewMode('raster');
-                    } catch (err) {
-                        console.error(err);
-                        document.getElementById('loading').textContent = '❌ Failed to load COG: ' + err.message;
-                    }
+                        setViewMode('potential');
+                    };
+
+                    fetch('potential_points.bin')
+                        .then((response) => response.ok ? response.arrayBuffer() : Promise.reject(new Error('missing binary')))
+                        .then((buffer) => {
+                            const floatValues = new Float32Array(buffer);
+                            const isLandClass = (value) => value >= 0 && value <= 2 && Math.abs(value - Math.round(value)) < 1e-5;
+                            let hasClassChannel = floatValues.length >= 4 && isLandClass(floatValues[3]);
+                            if (!hasClassChannel && floatValues.length >= 16) {
+                                hasClassChannel = isLandClass(floatValues[3]) && isLandClass(floatValues[7]) && isLandClass(floatValues[11]);
+                            }
+                            const stride = hasClassChannel ? 4 : 3;
+                            const points = [];
+                            for (let i = 0; i < floatValues.length; i += stride) {
+                                if (stride === 4) points.push([floatValues[i], floatValues[i + 1], floatValues[i + 2], floatValues[i + 3]]);
+                                else points.push([floatValues[i], floatValues[i + 1], floatValues[i + 2]]);
+                            }
+                            return points;
+                        })
+                        .then(loadPotential)
+                        .catch(() => fetch('potential_points.json').then((response) => response.json()).then(loadPotential))
+                        .catch((error) => {
+                            console.error(error);
+                            document.getElementById('loading').innerHTML = '❌ Missing potential layer. Run: python raster_potential_to_points.py --raster data/wet_woodland_potential.tif --output docs/potential_points.json';
+                        });
                 });
-                const lvNames = ['Grade 1–2', 'Grade 3', 'Grade 4–5'];
+
+                document.getElementById('btn-raster').addEventListener('click', () => activateRasterView());
+
+                const landValueNames = ['Grade 1–2', 'Grade 3', 'Grade 4–5'];
                 document.getElementById('lv-12').addEventListener('click', () => {
                     potentialLandValueClass = 0;
                     if (viewMode === 'potential') {
-                        document.getElementById('legend-title').textContent = 'Restoration suitability — ' + lvNames[0];
+                        document.getElementById('legend-title').textContent = 'Restoration suitability — ' + landValueNames[0];
                         document.getElementById('lv-12').classList.add('active');
                         document.getElementById('lv-3').classList.remove('active');
                         document.getElementById('lv-45').classList.remove('active');
                         updateLayers();
                     }
                 });
+
                 document.getElementById('lv-3').addEventListener('click', () => {
                     potentialLandValueClass = 1;
                     if (viewMode === 'potential') {
-                        document.getElementById('legend-title').textContent = 'Restoration suitability — ' + lvNames[1];
+                        document.getElementById('legend-title').textContent = 'Restoration suitability — ' + landValueNames[1];
                         document.getElementById('lv-3').classList.add('active');
                         document.getElementById('lv-12').classList.remove('active');
                         document.getElementById('lv-45').classList.remove('active');
                         updateLayers();
                     }
                 });
+
                 document.getElementById('lv-45').addEventListener('click', () => {
                     potentialLandValueClass = 2;
                     if (viewMode === 'potential') {
-                        document.getElementById('legend-title').textContent = 'Restoration suitability — ' + lvNames[2];
+                        document.getElementById('legend-title').textContent = 'Restoration suitability — ' + landValueNames[2];
                         document.getElementById('lv-45').classList.add('active');
                         document.getElementById('lv-12').classList.remove('active');
                         document.getElementById('lv-3').classList.remove('active');
                         updateLayers();
                     }
                 });
+
                 document.getElementById('close-polygon-popup').addEventListener('click', hidePolygonPopup);
             })
-            .catch(error => {
+            .catch((error) => {
                 console.error('Error loading data:', error);
                 document.getElementById('loading').innerHTML = '❌ Error loading data. Please check console for details.';
             });
