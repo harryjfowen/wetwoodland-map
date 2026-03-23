@@ -201,7 +201,7 @@ const viridisLUT = buildViridisLUT();
 // Attempt deck.gl-raster v0.3 COGLayer via esm.sh
 // Falls back to TileLayer + geotiff.js if unavailable
 // ─────────────────────────────────────────────────────────────────────────────
-const COG_URL = './wetwoodland_probability.cog.bin';
+const COG_URL = './wetwoodland_probability.cog.bin?v=b45b669';
 
 let useNativeLayer = false;
 let COGLayer, CreateTexture, Colormap, FilterNoDataVal, GeoTIFFReader;
