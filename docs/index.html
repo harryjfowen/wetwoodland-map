@@ -261,13 +261,13 @@
     <div id="loading">Loading wet woodland data...</div>
 
     <div id="view-toggle">
-        <button type="button" id="btn-raster" class="active">Extent</button>
-        <button type="button" id="btn-hexagons">Density</button>
+        <button type="button" id="btn-raster">Extent</button>
+        <button type="button" id="btn-hexagons" class="active">Density</button>
         <button type="button" id="btn-polygons">LNRS Regions</button>
         <button type="button" id="btn-potential">Potential</button>
     </div>
 
-    <div id="controls" style="display: none;">
+    <div id="controls">
         <h3>⚙️ Controls</h3>
         <div class="control-group">
             <label>
@@ -299,7 +299,7 @@
         </div>
     </div>
 
-    <div id="info" style="display: none;">
+    <div id="info">
         <h2>🌲 Wet Woodland Distribution</h2>
         <p style="margin-bottom: 12px; font-size: 12px;">3D hexagon visualization across England</p>
 
@@ -323,7 +323,7 @@
         <p style="margin: 3px 0; font-size: 12px;"><strong>Mean NN distance:</strong> 136.4 m</p>
     </div>
     <div id="legend">
-        <h3 id="legend-title">Wet Woodland Extent</h3>
+        <h3 id="legend-title">Wet Woodland Density</h3>
         <div id="landvalue-toggle" class="landvalue-toggle" style="display: none;">
             <span class="landvalue-label">Land value:</span>
             <button type="button" id="lv-12" class="active">1–2</button>
@@ -386,7 +386,7 @@
         let layerOpacity = 0.5;
         let minPixelCount = 1;
         let maxPixelCount = Infinity;
-        let viewMode = 'raster';
+        let viewMode = 'hexagons';
         let hexagonData = null;
         let polygonData = null;
         let potentialPoints = null;
@@ -601,6 +601,32 @@
             cogReady = true;
         }
 
+        let cogAvailabilityCheck = null;
+        async function checkCogAvailable() {
+            if (cogReady) return true;
+            if (!cogAvailabilityCheck) {
+                cogAvailabilityCheck = (async () => {
+                    const controller = new AbortController();
+                    const timeout = setTimeout(() => controller.abort(), 2500);
+                    try {
+                        const response = await fetch(COG_URL, {
+                            method: 'HEAD',
+                            cache: 'no-store',
+                            signal: controller.signal
+                        });
+                        return response.ok;
+                    } catch {
+                        return false;
+                    } finally {
+                        clearTimeout(timeout);
+                    }
+                })();
+            }
+            const available = await cogAvailabilityCheck;
+            if (!available) cogAvailabilityCheck = null;
+            return available;
+        }
+
         async function activateRasterView({ fallbackToHexagons = false } = {}) {
             if (cogReady) {
                 document.getElementById('loading').style.display = 'none';
@@ -612,6 +638,8 @@
             document.getElementById('loading').textContent = 'Loading full-resolution band 2 COG...';
 
             try {
+                const cogAvailable = await checkCogAvailable();
+                if (!cogAvailable) throw new Error('COG not available from this deployment');
                 await ensureCogLayer();
                 document.getElementById('loading').style.display = 'none';
                 setViewMode('raster');
@@ -951,8 +979,8 @@
                 });
 
                 map.addControl(deckOverlay);
-                map.on('load', async () => {
-                    await activateRasterView({ fallbackToHexagons: true });
+                map.on('load', () => {
+                    document.getElementById('loading').style.display = 'none';
                     updateLayers();
                 });
 
