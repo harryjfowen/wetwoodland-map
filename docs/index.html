@@ -375,7 +375,7 @@
             rgb(20, 67, 108),
             rgb(9, 35, 69)
         )`;
-        const COG_URL = './wetwoodland_probability.cog.bin?v=b45b669';
+        const COG_URL = './wetwoodland_probability.cog.bin?v=20260323-sharp30';
 
         // Control state
         let heightExponent = 1.0;
@@ -430,33 +430,12 @@
             }
             return a;
         })();
-        const PLASMA_LUT_IMAGE = new ImageData(PLASMA_LUT, 256, 1);
-
         const _R = 6378137;
         const _lonToM = lon => lon * Math.PI * _R / 180;
         const _latToM = lat => Math.log(Math.tan(Math.PI/4 + lat*Math.PI/360)) * _R;
 
-        async function buildNativeCogLayer() {
-            const rasterPkg = await import('https://esm.sh/@developmentseed/deck.gl-raster@0.3');
-            const geotiffPkg = await import('https://esm.sh/@developmentseed/deck.gl-geotiff@0.3');
-            const { CreateTexture, Colormap, FilterNoDataVal } = rasterPkg;
-            const { COGLayer } = geotiffPkg;
-            if (!COGLayer || !CreateTexture || !Colormap || !FilterNoDataVal) {
-                throw new Error('deck.gl-raster modules unavailable');
-            }
-            return new COGLayer({
-                id: 'probability-cog-native',
-                geotiff: COG_URL,
-                maxRequests: 6,
-                renderTile: (texture) => [
-                    { module: CreateTexture, props: { textureName: texture } },
-                    { module: Colormap, props: { colormapTexture: PLASMA_LUT_IMAGE } },
-                    { module: FilterNoDataVal, props: { value: 255 } }
-                ]
-            });
-        }
-
-        async function buildFallbackCogLayer() {
+        async function ensureCogLayer() {
+            if (cogReady) return;
             const { fromUrl } = await import('https://esm.sh/geotiff@2.1.3');
             const TILE_SIZE = 256;
             const tiff = await fromUrl(COG_URL);
@@ -495,7 +474,7 @@
                 const wy1=Math.min(meta.h,Math.ceil ((cogBbox[3]-south)/resY));
                 if (wx1<=wx0||wy1<=wy0) return null;
                 let rasters;
-                try { rasters = await img.readRasters({window:[wx0,wy0,wx1,wy1],width:TILE_SIZE,height:TILE_SIZE,resampleMethod:'nearest'}); }
+                try { rasters = await img.readRasters({window:[wx0,wy0,wx1,wy1],width:TILE_SIZE,height:TILE_SIZE}); }
                 catch { return null; }
                 const band = rasters[0];
                 const rgba = new Uint8ClampedArray(TILE_SIZE*TILE_SIZE*4);
@@ -510,7 +489,7 @@
                 canvas.getContext('2d').putImageData(new ImageData(rgba,TILE_SIZE,TILE_SIZE),0,0);
                 return canvas;
             }
-            return new deck.TileLayer({
+            cogLayer = new deck.TileLayer({
                 id: 'probability-cog',
                 getTileData,
                 tileSize: TILE_SIZE,
@@ -523,16 +502,6 @@
                     return new deck.BitmapLayer({...props, data:null, image:props.data, bounds:[west,south,east,north]});
                 }
             });
-        }
-
-        async function ensureCogLayer() {
-            if (cogReady) return;
-            try {
-                cogLayer = await buildNativeCogLayer();
-            } catch (error) {
-                console.warn('Native COGLayer unavailable, using TileLayer fallback.', error);
-                cogLayer = await buildFallbackCogLayer();
-            }
             cogReady = true;
         }
 

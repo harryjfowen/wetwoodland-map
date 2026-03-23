@@ -33,7 +33,7 @@ TARGETS = {
         "src": "data/wet_woodland_potential.tif",
         "band": 1,
         "out": "docs/wetwoodland_probability.cog.bin",
-        "resolution": 60,
+        "resolution": 30,
     },
     "extent": {
         "src": "data/wetwoodland_extent.tif",
@@ -79,7 +79,9 @@ def warp_band_to_3857(src_path: Path, band: int, dst_path: Path, resolution: flo
                 dst_transform=transform,
                 dst_crs=EPSG_3857,
                 dst_nodata=src_nodata,
-                resampling=Resampling.bilinear,
+                # Preserve the original 100 m cell edges so the web COG stays sharp
+                # and compressible when published at a finer 30 m grid.
+                resampling=Resampling.nearest,
             )
 
 
