@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <script src="https://unpkg.com/deck.gl@latest/dist.min.js"></script>
     <script src="https://unpkg.com/@deck.gl/aggregation-layers@latest/dist.min.js"></script>
+    <script src="https://unpkg.com/pmtiles@4.3.0/dist/pmtiles.js"></script>
     <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
     <link href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css" rel="stylesheet">
     <style>
@@ -267,6 +268,7 @@
         <button type="button" id="btn-hexagons" class="active">Density</button>
         <button type="button" id="btn-polygons">LNRS Regions</button>
         <button type="button" id="btn-potential">Potential</button>
+        <button type="button" id="btn-raster">10m Raster</button>
     </div>
 
     <div id="controls">
@@ -355,12 +357,34 @@
             bearing: 0
         };
 
+        const DENSITY_GRADIENT = `linear-gradient(to right,
+            rgb(1, 152, 189),
+            rgb(73, 227, 206),
+            rgb(216, 254, 181),
+            rgb(254, 237, 177),
+            rgb(254, 173, 84),
+            rgb(209, 55, 78)
+        )`;
+        const PLASMA_GRADIENT = `linear-gradient(to right,
+            rgb(13, 8, 135),
+            rgb(84, 2, 163),
+            rgb(139, 10, 165),
+            rgb(185, 50, 137),
+            rgb(219, 92, 104),
+            rgb(244, 136, 73),
+            rgb(254, 188, 43),
+            rgb(240, 249, 33)
+        )`;
+        const RASTER_PM_URL = 'wet_woodland_probability.pmtiles';
+        const RASTER_SOURCE_ID = 'wet-woodland-probability-pmtiles';
+        const RASTER_LAYER_ID = 'wet-woodland-probability-raster';
+
         // Control state
         let heightExponent = 1.0;
         let layerOpacity = 0.5;
         let minPixelCount = 1;
         let maxPixelCount = Infinity;
-        let viewMode = 'hexagons';  // 'hexagons' | 'polygons' | 'potential'
+        let viewMode = 'hexagons';  // 'hexagons' | 'polygons' | 'potential' | 'raster'
         let hexagonData = null;
         let polygonData = null;
         let potentialPoints = null;  // [lon, lat, value] or [lon, lat, value, landClass] for HeatmapLayer
@@ -370,6 +394,8 @@
         let maxCount = 0;
         let minCount = 0;
         let deckgl = null;
+        let rasterInitPromise = null;
+        let rasterSourceReady = false;
 
         const DENSITY_COLOR_RANGE = [[1,152,189],[73,227,206],[216,254,181],[254,237,177],[254,173,84],[209,55,78]];
         const POTENTIAL_COLOR_RANGE = DENSITY_COLOR_RANGE.map((c, i) => {
@@ -474,36 +500,138 @@
             document.getElementById('polygon-popup').classList.remove('visible');
         }
 
-        function setViewMode(mode) {
-            viewMode = mode;
-            document.getElementById('btn-hexagons').classList.toggle('active', mode === 'hexagons');
-            document.getElementById('btn-polygons').classList.toggle('active', mode === 'polygons');
-            document.getElementById('btn-potential').classList.toggle('active', mode === 'potential');
-            document.getElementById('controls').style.display = mode === 'hexagons' ? 'block' : 'none';
-            document.getElementById('legend').style.display = 'block';
+        function getMapInstance() {
+            if (!deckgl || typeof deckgl.getMapboxMap !== 'function') return null;
+            return deckgl.getMapboxMap();
+        }
+
+        function applyLegendStyle(mode) {
             const legendTitle = document.getElementById('legend-title');
+            const legendGradient = document.querySelector('.legend-gradient');
+            const legendLabels = document.querySelector('.legend-labels');
             const hasLandValueClasses = potentialPoints && potentialPoints.length > 0 && potentialPoints[0].length === 4;
             const lvNames = ['Grade 1–2', 'Grade 3', 'Grade 4–5'];
+
             if (mode === 'hexagons') {
                 legendTitle.textContent = 'Wet Woodland Density';
+                legendGradient.style.background = DENSITY_GRADIENT;
+                legendLabels.innerHTML = '<span>Low</span><span>High</span>';
                 document.getElementById('landvalue-toggle').style.display = 'none';
-            } else if (mode === 'polygons') {
+                return;
+            }
+
+            if (mode === 'polygons') {
                 legendTitle.textContent = 'Wet woodland area (ha)';
+                legendGradient.style.background = DENSITY_GRADIENT;
+                legendLabels.innerHTML = '<span>Low</span><span>High</span>';
                 document.getElementById('landvalue-toggle').style.display = 'none';
-            } else {
+                return;
+            }
+
+            if (mode === 'potential') {
                 legendTitle.textContent = hasLandValueClasses
                     ? 'Restoration suitability — ' + lvNames[potentialLandValueClass]
                     : 'Restoration suitability (0.15 – 1)';
-                const lvToggle = document.getElementById('landvalue-toggle');
-                lvToggle.style.display = hasLandValueClasses ? 'flex' : 'none';
+                legendGradient.style.background = DENSITY_GRADIENT;
+                legendLabels.innerHTML = '<span>Low</span><span>High</span>';
+                document.getElementById('landvalue-toggle').style.display = hasLandValueClasses ? 'flex' : 'none';
                 if (hasLandValueClasses) {
                     document.getElementById('lv-12').classList.toggle('active', potentialLandValueClass === 0);
                     document.getElementById('lv-3').classList.toggle('active', potentialLandValueClass === 1);
                     document.getElementById('lv-45').classList.toggle('active', potentialLandValueClass === 2);
                 }
+                return;
             }
+
+            legendTitle.textContent = 'Wet woodland probability (10m)';
+            legendGradient.style.background = PLASMA_GRADIENT;
+            legendLabels.innerHTML = '<span>Low</span><span>High</span>';
+            document.getElementById('landvalue-toggle').style.display = 'none';
+        }
+
+        function setRasterVisibility(visible) {
+            const map = getMapInstance();
+            if (!map || !map.getLayer(RASTER_LAYER_ID)) return;
+            map.setLayoutProperty(RASTER_LAYER_ID, 'visibility', visible ? 'visible' : 'none');
+        }
+
+        function whenMapStyleReady(map) {
+            if (map.isStyleLoaded()) return Promise.resolve();
+            return new Promise((resolve) => map.once('load', resolve));
+        }
+
+        function ensureRasterSource() {
+            if (rasterInitPromise) return rasterInitPromise;
+
+            rasterInitPromise = new Promise((resolve, reject) => {
+                const map = getMapInstance();
+                if (!map) {
+                    reject(new Error('MapLibre map is not ready'));
+                    return;
+                }
+
+                try {
+                    if (!window.wetWoodlandPmtilesProtocol) {
+                        window.wetWoodlandPmtilesProtocol = new pmtiles.Protocol();
+                        maplibregl.addProtocol('pmtiles', window.wetWoodlandPmtilesProtocol.tile);
+                    }
+                    if (!window.wetWoodlandRasterArchive) {
+                        window.wetWoodlandRasterArchive = new pmtiles.PMTiles(RASTER_PM_URL);
+                        window.wetWoodlandPmtilesProtocol.add(window.wetWoodlandRasterArchive);
+                    }
+
+                    Promise.all([
+                        whenMapStyleReady(map),
+                        window.wetWoodlandRasterArchive.getHeader()
+                    ]).then(([, header]) => {
+                        if (!map.getSource(RASTER_SOURCE_ID)) {
+                            map.addSource(RASTER_SOURCE_ID, {
+                                type: 'raster',
+                                url: `pmtiles://${RASTER_PM_URL}`,
+                                tileSize: 512,
+                                minzoom: header.minZoom ?? 0,
+                                maxzoom: header.maxZoom ?? 13,
+                                bounds: [header.minLon, header.minLat, header.maxLon, header.maxLat]
+                            });
+                        }
+                        if (!map.getLayer(RASTER_LAYER_ID)) {
+                            map.addLayer({
+                                id: RASTER_LAYER_ID,
+                                type: 'raster',
+                                source: RASTER_SOURCE_ID,
+                                paint: {
+                                    'raster-opacity': 0.93,
+                                    'raster-resampling': 'nearest',
+                                    'raster-fade-duration': 0
+                                },
+                                layout: {
+                                    visibility: 'none'
+                                }
+                            });
+                        }
+                        rasterSourceReady = true;
+                        resolve();
+                    }).catch(reject);
+                } catch (error) {
+                    reject(error);
+                }
+            });
+
+            return rasterInitPromise;
+        }
+
+        function setViewMode(mode) {
+            viewMode = mode;
+            document.getElementById('btn-hexagons').classList.toggle('active', mode === 'hexagons');
+            document.getElementById('btn-polygons').classList.toggle('active', mode === 'polygons');
+            document.getElementById('btn-potential').classList.toggle('active', mode === 'potential');
+            document.getElementById('btn-raster').classList.toggle('active', mode === 'raster');
+            document.getElementById('controls').style.display = mode === 'hexagons' ? 'block' : 'none';
+            document.getElementById('legend').style.display = 'block';
+            applyLegendStyle(mode);
             document.getElementById('info').style.display = mode === 'hexagons' ? 'block' : 'none';
             if (mode === 'polygons') hidePolygonPopup();
+            if (mode !== 'polygons') hidePolygonPopup();
             updateLayers();
         }
 
@@ -568,6 +696,7 @@
 
         function updateLayers() {
             if (deckgl) deckgl.setProps({ layers: getLayers() });
+            setRasterVisibility(viewMode === 'raster' && rasterSourceReady);
         }
 
         // Load hexagon data first, then init map
@@ -705,6 +834,9 @@
                                 document.getElementById('loading').innerHTML = '❌ Missing potential layer. Run: python raster_potential_to_points.py --raster data/wet_woodland_potential.tif --output docs/potential_points.json';
                             });
                     }
+                });
+                document.getElementById('btn-raster').addEventListener('click', () => {
+                    window.location.href = 'wet_woodland_cog.html';
                 });
                 const lvNames = ['Grade 1–2', 'Grade 3', 'Grade 4–5'];
                 document.getElementById('lv-12').addEventListener('click', () => {
