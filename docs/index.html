@@ -6,7 +6,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <script src="https://unpkg.com/deck.gl@latest/dist.min.js"></script>
     <script src="https://unpkg.com/@deck.gl/aggregation-layers@latest/dist.min.js"></script>
-    <script src="https://unpkg.com/pmtiles@4.3.0/dist/pmtiles.js"></script>
     <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
     <link href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css" rel="stylesheet">
     <style>
@@ -375,9 +374,7 @@
             rgb(254, 188, 43),
             rgb(240, 249, 33)
         )`;
-        const RASTER_PM_URL = 'wet_woodland_probability.pmtiles';
-        const RASTER_SOURCE_ID = 'wet-woodland-probability-pmtiles';
-        const RASTER_LAYER_ID = 'wet-woodland-probability-raster';
+        const COG_URL = 'https://github.com/harryjfowen/wetwoodland-map/releases/download/v1.0-data/wetwoodland_probability.cog.tif';
 
         // Control state
         let heightExponent = 1.0;
@@ -394,8 +391,8 @@
         let maxCount = 0;
         let minCount = 0;
         let deckgl = null;
-        let rasterInitPromise = null;
-        let rasterSourceReady = false;
+        let cogLayer = null;
+        let cogReady = false;
 
         const DENSITY_COLOR_RANGE = [[1,152,189],[73,227,206],[216,254,181],[254,237,177],[254,173,84],[209,55,78]];
         const POTENTIAL_COLOR_RANGE = DENSITY_COLOR_RANGE.map((c, i) => {
@@ -413,6 +410,99 @@
             const t = position - i;
             const c = (idx) => Math.floor(DENSITY_COLOR_RANGE[i][idx] + (DENSITY_COLOR_RANGE[j][idx] - DENSITY_COLOR_RANGE[i][idx]) * t);
             return [c(0), c(1), c(2), alpha];
+        }
+
+        // Plasma colormap LUT (256 entries, matches PLASMA_GRADIENT)
+        const PLASMA_LUT = (() => {
+            const S = [
+                [0.00,[13,8,135,0]],[0.03,[13,8,135,50]],[0.14,[84,2,163,130]],
+                [0.29,[139,10,165,170]],[0.43,[185,50,137,200]],[0.57,[219,92,104,215]],
+                [0.71,[244,136,73,225]],[0.86,[254,188,43,232]],[1.00,[240,249,33,240]]
+            ];
+            const a = new Uint8ClampedArray(256*4);
+            for (let i = 0; i < 256; i++) {
+                const t = i/255;
+                let s0=S[0], s1=S[1];
+                for (let j=1;j<S.length;j++) { if(t<=S[j][0]){s0=S[j-1];s1=S[j];break;} s0=S[j];s1=S[j]; }
+                const f = s0[0]===s1[0] ? 1 : (t-s0[0])/(s1[0]-s0[0]);
+                for (let c=0;c<4;c++) a[i*4+c]=Math.round(s0[1][c]+f*(s1[1][c]-s0[1][c]));
+            }
+            return a;
+        })();
+
+        const _R = 6378137;
+        const _lonToM = lon => lon * Math.PI * _R / 180;
+        const _latToM = lat => Math.log(Math.tan(Math.PI/4 + lat*Math.PI/360)) * _R;
+
+        async function ensureCogLayer() {
+            if (cogReady) return;
+            const { fromUrl } = await import('https://esm.sh/geotiff@2.1.3');
+            const TILE_SIZE = 256;
+            const tiff = await fromUrl(COG_URL);
+            const imageCount = await tiff.getImageCount();
+            const imgCache = new Array(imageCount);
+            async function getImg(i) {
+                if (!imgCache[i]) imgCache[i] = await tiff.getImage(i);
+                return imgCache[i];
+            }
+            const base    = await getImg(0);
+            const cogBbox = base.getBoundingBox();
+            const spanX   = cogBbox[2] - cogBbox[0];
+            const spanY   = cogBbox[3] - cogBbox[1];
+            const ovMeta  = [];
+            for (let i = 0; i < imageCount; i++) {
+                const img = await getImg(i);
+                ovMeta.push({ i, res: spanX / img.getWidth(), w: img.getWidth(), h: img.getHeight() });
+            }
+            ovMeta.sort((a, b) => a.res - b.res);
+            function pickOv(targetRes) {
+                let pick = ovMeta[0];
+                for (const m of ovMeta) { if (m.res <= 2*targetRes) pick=m; else break; }
+                return pick;
+            }
+            const lut = PLASMA_LUT;
+            async function getTileData({ bbox }) {
+                const west=_lonToM(bbox.west), east=_lonToM(bbox.east);
+                const north=_latToM(bbox.north), south=_latToM(bbox.south);
+                if (east<=cogBbox[0]||west>=cogBbox[2]||north<=cogBbox[1]||south>=cogBbox[3]) return null;
+                const meta = pickOv((east-west)/TILE_SIZE);
+                const img  = await getImg(meta.i);
+                const resX = spanX/meta.w, resY = spanY/meta.h;
+                const wx0=Math.max(0,     Math.floor((west -cogBbox[0])/resX));
+                const wx1=Math.min(meta.w,Math.ceil ((east -cogBbox[0])/resX));
+                const wy0=Math.max(0,     Math.floor((cogBbox[3]-north)/resY));
+                const wy1=Math.min(meta.h,Math.ceil ((cogBbox[3]-south)/resY));
+                if (wx1<=wx0||wy1<=wy0) return null;
+                let rasters;
+                try { rasters = await img.readRasters({window:[wx0,wy0,wx1,wy1],width:TILE_SIZE,height:TILE_SIZE}); }
+                catch { return null; }
+                const band = rasters[0];
+                const rgba = new Uint8ClampedArray(TILE_SIZE*TILE_SIZE*4);
+                for (let i=0; i<TILE_SIZE*TILE_SIZE; i++) {
+                    const v = band[i];
+                    if (v>=255) continue;
+                    const idx = Math.min(255,Math.round(v*255/254))*4;
+                    rgba[i*4]=lut[idx]; rgba[i*4+1]=lut[idx+1]; rgba[i*4+2]=lut[idx+2]; rgba[i*4+3]=lut[idx+3];
+                }
+                const canvas = document.createElement('canvas');
+                canvas.width = canvas.height = TILE_SIZE;
+                canvas.getContext('2d').putImageData(new ImageData(rgba,TILE_SIZE,TILE_SIZE),0,0);
+                return canvas;
+            }
+            cogLayer = new deck.TileLayer({
+                id: 'probability-cog',
+                getTileData,
+                tileSize: TILE_SIZE,
+                maxRequests: 6,
+                minZoom: 4,
+                maxZoom: 16,
+                renderSubLayers(props) {
+                    if (!props.data) return null;
+                    const {west,south,east,north} = props.tile.bbox;
+                    return new deck.BitmapLayer({...props, data:null, image:props.data, bounds:[west,south,east,north]});
+                }
+            });
+            cogReady = true;
         }
 
         // Format polygon popup: selected stats only, bold label on left like density info pane
@@ -500,11 +590,6 @@
             document.getElementById('polygon-popup').classList.remove('visible');
         }
 
-        function getMapInstance() {
-            if (!deckgl || typeof deckgl.getMapboxMap !== 'function') return null;
-            return deckgl.getMapboxMap();
-        }
-
         function applyLegendStyle(mode) {
             const legendTitle = document.getElementById('legend-title');
             const legendGradient = document.querySelector('.legend-gradient');
@@ -547,77 +632,6 @@
             legendGradient.style.background = PLASMA_GRADIENT;
             legendLabels.innerHTML = '<span>Low</span><span>High</span>';
             document.getElementById('landvalue-toggle').style.display = 'none';
-        }
-
-        function setRasterVisibility(visible) {
-            const map = getMapInstance();
-            if (!map || !map.getLayer(RASTER_LAYER_ID)) return;
-            map.setLayoutProperty(RASTER_LAYER_ID, 'visibility', visible ? 'visible' : 'none');
-        }
-
-        function whenMapStyleReady(map) {
-            if (map.isStyleLoaded()) return Promise.resolve();
-            return new Promise((resolve) => map.once('load', resolve));
-        }
-
-        function ensureRasterSource() {
-            if (rasterInitPromise) return rasterInitPromise;
-
-            rasterInitPromise = new Promise((resolve, reject) => {
-                const map = getMapInstance();
-                if (!map) {
-                    reject(new Error('MapLibre map is not ready'));
-                    return;
-                }
-
-                try {
-                    if (!window.wetWoodlandPmtilesProtocol) {
-                        window.wetWoodlandPmtilesProtocol = new pmtiles.Protocol();
-                        maplibregl.addProtocol('pmtiles', window.wetWoodlandPmtilesProtocol.tile);
-                    }
-                    if (!window.wetWoodlandRasterArchive) {
-                        window.wetWoodlandRasterArchive = new pmtiles.PMTiles(RASTER_PM_URL);
-                        window.wetWoodlandPmtilesProtocol.add(window.wetWoodlandRasterArchive);
-                    }
-
-                    Promise.all([
-                        whenMapStyleReady(map),
-                        window.wetWoodlandRasterArchive.getHeader()
-                    ]).then(([, header]) => {
-                        if (!map.getSource(RASTER_SOURCE_ID)) {
-                            map.addSource(RASTER_SOURCE_ID, {
-                                type: 'raster',
-                                url: `pmtiles://${RASTER_PM_URL}`,
-                                tileSize: 512,
-                                minzoom: header.minZoom ?? 0,
-                                maxzoom: header.maxZoom ?? 13,
-                                bounds: [header.minLon, header.minLat, header.maxLon, header.maxLat]
-                            });
-                        }
-                        if (!map.getLayer(RASTER_LAYER_ID)) {
-                            map.addLayer({
-                                id: RASTER_LAYER_ID,
-                                type: 'raster',
-                                source: RASTER_SOURCE_ID,
-                                paint: {
-                                    'raster-opacity': 0.93,
-                                    'raster-resampling': 'nearest',
-                                    'raster-fade-duration': 0
-                                },
-                                layout: {
-                                    visibility: 'none'
-                                }
-                            });
-                        }
-                        rasterSourceReady = true;
-                        resolve();
-                    }).catch(reject);
-                } catch (error) {
-                    reject(error);
-                }
-            });
-
-            return rasterInitPromise;
         }
 
         function setViewMode(mode) {
@@ -691,12 +705,12 @@
                     colorRange: POTENTIAL_COLOR_RANGE
                 })];
             }
+            if (viewMode === 'raster' && cogLayer) return [cogLayer];
             return [];
         }
 
         function updateLayers() {
             if (deckgl) deckgl.setProps({ layers: getLayers() });
-            setRasterVisibility(viewMode === 'raster' && rasterSourceReady);
         }
 
         // Load hexagon data first, then init map
@@ -835,8 +849,18 @@
                             });
                     }
                 });
-                document.getElementById('btn-raster').addEventListener('click', () => {
-                    window.location.href = 'wet_woodland_cog.html';
+                document.getElementById('btn-raster').addEventListener('click', async () => {
+                    if (cogReady) { setViewMode('raster'); return; }
+                    document.getElementById('loading').style.display = 'block';
+                    document.getElementById('loading').textContent = 'Loading 10m probability raster...';
+                    try {
+                        await ensureCogLayer();
+                        document.getElementById('loading').style.display = 'none';
+                        setViewMode('raster');
+                    } catch (err) {
+                        console.error(err);
+                        document.getElementById('loading').textContent = '❌ Failed to load COG: ' + err.message;
+                    }
                 });
                 const lvNames = ['Grade 1–2', 'Grade 3', 'Grade 4–5'];
                 document.getElementById('lv-12').addEventListener('click', () => {
