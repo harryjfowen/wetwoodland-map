@@ -367,14 +367,13 @@
             rgb(209, 55, 78)
         )`;
         const PLASMA_GRADIENT = `linear-gradient(to right,
-            rgb(13, 8, 135),
-            rgb(84, 2, 163),
-            rgb(139, 10, 165),
-            rgb(185, 50, 137),
-            rgb(219, 92, 104),
-            rgb(244, 136, 73),
-            rgb(254, 188, 43),
-            rgb(240, 249, 33)
+            rgb(236, 245, 232),
+            rgb(204, 227, 205),
+            rgb(150, 199, 186),
+            rgb(92, 160, 168),
+            rgb(46, 112, 141),
+            rgb(20, 67, 108),
+            rgb(9, 35, 69)
         )`;
         const COG_URL = './wetwoodland_probability.cog.bin';
 
@@ -414,12 +413,12 @@
             return [c(0), c(1), c(2), alpha];
         }
 
-        // Plasma colormap LUT (256 entries, matches PLASMA_GRADIENT)
+        // Forest-style LUT: pale green through teal into deep blue.
         const PLASMA_LUT = (() => {
             const S = [
-                [0.00,[13,8,135,0]],[0.03,[13,8,135,50]],[0.14,[84,2,163,130]],
-                [0.29,[139,10,165,170]],[0.43,[185,50,137,200]],[0.57,[219,92,104,215]],
-                [0.71,[244,136,73,225]],[0.86,[254,188,43,232]],[1.00,[240,249,33,240]]
+                [0.00,[236,245,232,0]],[0.08,[236,245,232,40]],[0.22,[204,227,205,110]],
+                [0.40,[150,199,186,150]],[0.58,[92,160,168,185]],[0.78,[46,112,141,220]],
+                [1.00,[9,35,69,245]]
             ];
             const a = new Uint8ClampedArray(256*4);
             for (let i = 0; i < 256; i++) {
@@ -476,7 +475,7 @@
                 const wy1=Math.min(meta.h,Math.ceil ((cogBbox[3]-south)/resY));
                 if (wx1<=wx0||wy1<=wy0) return null;
                 let rasters;
-                try { rasters = await img.readRasters({window:[wx0,wy0,wx1,wy1],width:TILE_SIZE,height:TILE_SIZE}); }
+                try { rasters = await img.readRasters({window:[wx0,wy0,wx1,wy1],width:TILE_SIZE,height:TILE_SIZE,resampleMethod:'nearest'}); }
                 catch { return null; }
                 const band = rasters[0];
                 const rgba = new Uint8ClampedArray(TILE_SIZE*TILE_SIZE*4);
