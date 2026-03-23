@@ -430,13 +430,33 @@
             }
             return a;
         })();
+        const PLASMA_LUT_IMAGE = new ImageData(PLASMA_LUT, 256, 1);
 
         const _R = 6378137;
         const _lonToM = lon => lon * Math.PI * _R / 180;
         const _latToM = lat => Math.log(Math.tan(Math.PI/4 + lat*Math.PI/360)) * _R;
 
-        async function ensureCogLayer() {
-            if (cogReady) return;
+        async function buildNativeCogLayer() {
+            const rasterPkg = await import('https://esm.sh/@developmentseed/deck.gl-raster@0.3');
+            const geotiffPkg = await import('https://esm.sh/@developmentseed/deck.gl-geotiff@0.3');
+            const { CreateTexture, Colormap, FilterNoDataVal } = rasterPkg;
+            const { COGLayer } = geotiffPkg;
+            if (!COGLayer || !CreateTexture || !Colormap || !FilterNoDataVal) {
+                throw new Error('deck.gl-raster modules unavailable');
+            }
+            return new COGLayer({
+                id: 'probability-cog-native',
+                geotiff: COG_URL,
+                maxRequests: 6,
+                renderTile: (texture) => [
+                    { module: CreateTexture, props: { textureName: texture } },
+                    { module: Colormap, props: { colormapTexture: PLASMA_LUT_IMAGE } },
+                    { module: FilterNoDataVal, props: { value: 255 } }
+                ]
+            });
+        }
+
+        async function buildFallbackCogLayer() {
             const { fromUrl } = await import('https://esm.sh/geotiff@2.1.3');
             const TILE_SIZE = 256;
             const tiff = await fromUrl(COG_URL);
@@ -490,7 +510,7 @@
                 canvas.getContext('2d').putImageData(new ImageData(rgba,TILE_SIZE,TILE_SIZE),0,0);
                 return canvas;
             }
-            cogLayer = new deck.TileLayer({
+            return new deck.TileLayer({
                 id: 'probability-cog',
                 getTileData,
                 tileSize: TILE_SIZE,
@@ -503,6 +523,16 @@
                     return new deck.BitmapLayer({...props, data:null, image:props.data, bounds:[west,south,east,north]});
                 }
             });
+        }
+
+        async function ensureCogLayer() {
+            if (cogReady) return;
+            try {
+                cogLayer = await buildNativeCogLayer();
+            } catch (error) {
+                console.warn('Native COGLayer unavailable, using TileLayer fallback.', error);
+                cogLayer = await buildFallbackCogLayer();
+            }
             cogReady = true;
         }
 
