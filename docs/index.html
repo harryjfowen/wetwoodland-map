@@ -512,24 +512,45 @@
                 const west=_lonToM(bbox.west), east=_lonToM(bbox.east);
                 const north=_latToM(bbox.north), south=_latToM(bbox.south);
                 if (east<=cogBbox[0]||west>=cogBbox[2]||north<=cogBbox[1]||south>=cogBbox[3]) return null;
+                const overlapWest = Math.max(west, cogBbox[0]);
+                const overlapEast = Math.min(east, cogBbox[2]);
+                const overlapNorth = Math.min(north, cogBbox[3]);
+                const overlapSouth = Math.max(south, cogBbox[1]);
+                if (overlapEast<=overlapWest || overlapNorth<=overlapSouth) return null;
                 const meta = useOverviews ? pickOv((east-west)/TILE_SIZE) : ovMeta[0];
                 const img  = await getImg(meta.i);
                 const resX = spanX/meta.w, resY = spanY/meta.h;
-                const wx0=Math.max(0,     Math.floor((west -cogBbox[0])/resX));
-                const wx1=Math.min(meta.w,Math.ceil ((east -cogBbox[0])/resX));
-                const wy0=Math.max(0,     Math.floor((cogBbox[3]-north)/resY));
-                const wy1=Math.min(meta.h,Math.ceil ((cogBbox[3]-south)/resY));
+                const wx0=Math.max(0,     Math.floor((overlapWest -cogBbox[0])/resX));
+                const wx1=Math.min(meta.w,Math.ceil ((overlapEast -cogBbox[0])/resX));
+                const wy0=Math.max(0,     Math.floor((cogBbox[3]-overlapNorth)/resY));
+                const wy1=Math.min(meta.h,Math.ceil ((cogBbox[3]-overlapSouth)/resY));
                 if (wx1<=wx0||wy1<=wy0) return null;
+                const tileSpanX = east - west;
+                const tileSpanY = north - south;
+                const dx0 = Math.max(0, Math.floor(((overlapWest - west) / tileSpanX) * TILE_SIZE));
+                const dx1 = Math.min(TILE_SIZE, Math.ceil(((overlapEast - west) / tileSpanX) * TILE_SIZE));
+                const dy0 = Math.max(0, Math.floor(((north - overlapNorth) / tileSpanY) * TILE_SIZE));
+                const dy1 = Math.min(TILE_SIZE, Math.ceil(((north - overlapSouth) / tileSpanY) * TILE_SIZE));
+                const outW = dx1 - dx0;
+                const outH = dy1 - dy0;
+                if (outW<=0 || outH<=0) return null;
                 let rasters;
-                try { rasters = await img.readRasters({window:[wx0,wy0,wx1,wy1],width:TILE_SIZE,height:TILE_SIZE,resampleMethod}); }
+                try { rasters = await img.readRasters({window:[wx0,wy0,wx1,wy1],width:outW,height:outH,resampleMethod}); }
                 catch { return null; }
                 const band = rasters[0];
                 const rgba = new Uint8ClampedArray(TILE_SIZE*TILE_SIZE*4);
-                for (let i=0; i<TILE_SIZE*TILE_SIZE; i++) {
-                    const v = band[i];
-                    if (v>=255) continue;
-                    const idx = Math.min(255,Math.round(v*255/254))*4;
-                    rgba[i*4]=lut[idx]; rgba[i*4+1]=lut[idx+1]; rgba[i*4+2]=lut[idx+2]; rgba[i*4+3]=lut[idx+3];
+                for (let y = 0; y < outH; y++) {
+                    for (let x = 0; x < outW; x++) {
+                        const i = y * outW + x;
+                        const v = band[i];
+                        if (v>=255) continue;
+                        const dst = ((dy0 + y) * TILE_SIZE + (dx0 + x)) * 4;
+                        const idx = Math.min(255,Math.round(v*255/254))*4;
+                        rgba[dst]=lut[idx];
+                        rgba[dst+1]=lut[idx+1];
+                        rgba[dst+2]=lut[idx+2];
+                        rgba[dst+3]=lut[idx+3];
+                    }
                 }
                 const canvas = document.createElement('canvas');
                 canvas.width = canvas.height = TILE_SIZE;
