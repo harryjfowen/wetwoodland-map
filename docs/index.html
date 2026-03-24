@@ -357,6 +357,14 @@
             pitch: 45,
             bearing: 0
         };
+        const DEVON_RASTER_VIEW_STATE = {
+            latitude: 50.78,
+            longitude: -3.92,
+            zoom: 8.35,
+            pitch: 0,
+            bearing: 0,
+            transitionDuration: 1200
+        };
 
         const DENSITY_GRADIENT = `linear-gradient(to right,
             rgb(0, 0, 4),
@@ -405,6 +413,7 @@
         let deckgl = null;
         let cogLayer = null;
         let cogReady = false;
+        let hasFocusedRasterView = false;
 
         const DENSITY_COLOR_RANGE = [[0,0,4],[40,11,84],[101,21,110],[159,42,99],[212,72,66],[245,125,21],[252,253,191]];
         const POTENTIAL_COLOR_RANGE = [[48,18,59],[50,85,222],[35,171,216],[39,214,129],[171,236,52],[250,193,39],[245,94,24],[144,12,0]];
@@ -659,6 +668,10 @@
             if (mode === 'polygons') hidePolygonPopup();
             if (mode !== 'polygons') hidePolygonPopup();
             updateLayers();
+            if (mode === 'raster' && deckgl && !hasFocusedRasterView) {
+                deckgl.setProps({ initialViewState: DEVON_RASTER_VIEW_STATE });
+                hasFocusedRasterView = true;
+            }
         }
 
         function getLayers() {
