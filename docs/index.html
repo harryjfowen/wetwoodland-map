@@ -396,8 +396,8 @@
         )`;
         const FINE_COG_URL = './wetwoodland_probability.cog.bin?v=20260324-zoomblend';
         const COARSE_COG_URL = './wetwoodland_probability_1km.cog.bin?v=20260324-zoomblend-mask1';
-        const RASTER_BLEND_START_ZOOM = 7.9;
-        const RASTER_BLEND_END_ZOOM = 8.4;
+        const RASTER_BLEND_START_ZOOM = 7.7;
+        const RASTER_BLEND_END_ZOOM = 8.45;
 
         // Control state
         let heightExponent = 1.5;
@@ -483,7 +483,8 @@
             if (zoom <= RASTER_BLEND_START_ZOOM) return { coarseOpacity: 1, fineOpacity: 0 };
             if (zoom >= RASTER_BLEND_END_ZOOM) return { coarseOpacity: 0, fineOpacity: 1 };
             const t = (zoom - RASTER_BLEND_START_ZOOM) / (RASTER_BLEND_END_ZOOM - RASTER_BLEND_START_ZOOM);
-            return { coarseOpacity: 1 - t, fineOpacity: t };
+            const eased = t * t * (3 - 2 * t);
+            return { coarseOpacity: 1 - eased, fineOpacity: eased };
         }
 
         async function buildCogTileLayer({
