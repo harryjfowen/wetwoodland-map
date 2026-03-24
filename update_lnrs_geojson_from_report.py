@@ -4,8 +4,8 @@ Update LNRS GeoJSON with report-derived stats:
 - Extent stats from an extent report (default: data/wetwoodland_stats.txt)
   Supports either:
   - data/wet_woodland_REPORT.txt (full LNRS numeric table)
-  - data/wetwoodland_stats.txt (top-20 LNRS by name)
-- Suitability stats per LNRS from data/potential_stat_report.txt ([lnrs:*] blocks)
+  - data/wetwoodland_stats.txt (full LNRS numeric table in the current pipeline)
+- Suitability stats per LNRS from data/maxent.report.txt ([lnrs:*] blocks)
 
 Run this after refreshing report files so the Regions tab popup aligns with
 the latest extent/suitability pipeline outputs.
@@ -131,7 +131,7 @@ def main():
     )
     parser.add_argument(
         "--potential-report",
-        default="data/potential_stat_report.txt",
+        default="data/maxent.report.txt",
         help="Suitability report with [lnrs:*] sections (optional)",
     )
     args = parser.parse_args()

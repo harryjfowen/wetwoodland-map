@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
 """
-Build Cloud-Optimised GeoTIFFs (EPSG:3857, uint8, DEFLATE) for deck.gl-raster.
+Build Cloud-Optimised GeoTIFFs (EPSG:3857, uint8) for the web app.
 
 Outputs:
-  docs/wetwoodland_probability.cog.bin   — band 1 of wet_woodland_potential.tif
-  docs/wetwoodland_extent_b2.cog.bin     — band 2 of wetwoodland_extent.tif
+  docs/wetwoodland_probability.cog.bin        — band 1 of wet_woodland_potential.tif
+  docs/wetwoodland_probability_1km.cog.bin    — 1 km aggregate of band 1
+  docs/wetwoodland_extent_b2.cog.bin          — band 2 of wet_woodland_mosaic_hysteresis.tif
+  docs/wetwoodland_extent_b2_1km.cog.bin      — 1 km aggregate of extent band 2
 
 Usage:
-  python make_cog.py                   # build both
-  python make_cog.py --only extent     # build only extent band 2
-  python make_cog.py --overwrite       # force rebuild
+  python make_cog.py                        # build all targets
+  python make_cog.py --only extent          # build only fine extent band 2
+  python make_cog.py --only extent_coarse   # build only coarse extent band 2
+  python make_cog.py --overwrite            # force rebuild
 """
 
 from __future__ import annotations
@@ -45,11 +48,23 @@ TARGETS = {
         "min_valid_fraction": 0.5,
     },
     "extent": {
-        "src": "data/wetwoodland_extent.tif",
+        "src": "data/wet_woodland_mosaic_hysteresis.tif",
         "band": 2,
         "out": "docs/wetwoodland_extent_b2.cog.bin",
-        "resolution": None,
+        "resolution": 20,
         "resampling": Resampling.nearest,
+        "driver": "COG",
+        "compress": "ZSTD",
+        "level": 18,
+        "overview_compress": "ZSTD",
+    },
+    "extent_coarse": {
+        "src": "data/wet_woodland_mosaic_hysteresis.tif",
+        "band": 2,
+        "out": "docs/wetwoodland_extent_b2_1km.cog.bin",
+        "resolution": 1000,
+        "resampling": Resampling.average,
+        "min_valid_fraction": 0.5,
     },
 }
 
@@ -232,31 +247,47 @@ def build(name: str, overwrite: bool = False) -> None:
         print(f"[{name}] Quantizing to uint8 …")
         quantize_to_uint8(warped, quantized)
 
-        print(f"[{name}] Building overviews …")
-        add_overviews(quantized)
-
         print(f"[{name}] Writing COG → {out_path}")
-        # Use gdal_translate for a proper COG layout (copy_src_overviews)
+        # Use gdal_translate so individual targets can choose their COG settings.
         import subprocess, shutil
         gdal_translate = shutil.which("gdal_translate")
         if gdal_translate:
-            subprocess.run(
-                [
-                    gdal_translate,
-                    "-of", "GTiff",
-                    "-co", "TILED=YES",
-                    "-co", f"BLOCKXSIZE={TILE_SIZE}",
-                    "-co", f"BLOCKYSIZE={TILE_SIZE}",
-                    "-co", "COMPRESS=DEFLATE",
-                    "-co", "PREDICTOR=2",
-                    "-co", "ZLEVEL=9",
-                    "-co", "COPY_SRC_OVERVIEWS=YES",
-                    str(quantized),
-                    str(out_path),
-                ],
-                check=True,
-            )
+            driver = cfg.get("driver", "GTiff")
+            compress = cfg.get("compress", "DEFLATE")
+            translate_cmd = [
+                gdal_translate,
+                "-of", str(driver),
+                "-co", f"BLOCKSIZE={TILE_SIZE}" if driver == "COG" else f"BLOCKXSIZE={TILE_SIZE}",
+            ]
+            if driver != "COG":
+                print(f"[{name}] Building overviews …")
+                add_overviews(quantized)
+                translate_cmd.extend(
+                    [
+                        "-co", "TILED=YES",
+                        "-co", f"BLOCKYSIZE={TILE_SIZE}",
+                        "-co", f"COMPRESS={compress}",
+                        "-co", "PREDICTOR=2",
+                        "-co", f"ZLEVEL={cfg.get('level', 9)}",
+                        "-co", "COPY_SRC_OVERVIEWS=YES",
+                    ]
+                )
+            else:
+                translate_cmd.extend(
+                    [
+                        "-co", f"COMPRESS={compress}",
+                        "-co", f"LEVEL={cfg.get('level', 9)}",
+                        "-co", f"OVERVIEW_COMPRESS={cfg.get('overview_compress', compress)}",
+                        "-co", "RESAMPLING=NEAREST",
+                        "-co", "OVERVIEW_RESAMPLING=NEAREST",
+                        "-co", "NUM_THREADS=ALL_CPUS",
+                    ]
+                )
+            translate_cmd.extend([str(quantized), str(out_path)])
+            subprocess.run(translate_cmd, check=True)
         else:
+            print(f"[{name}] Building overviews …")
+            add_overviews(quantized)
             # Pure rasterio fallback
             import shutil as _sh
             _sh.copy2(quantized, out_path)

@@ -139,7 +139,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--raster",
-        default="data/wetwoodland_extent.tif",
+        default="data/wet_woodland_mosaic_hysteresis.tif",
         help="Input raster (band 1 is treated as the binary extent surface)",
     )
     parser.add_argument(
