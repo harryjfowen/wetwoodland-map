@@ -417,8 +417,10 @@
         let fineCogLayer = null;
         let coarseRasterLayer = null;
         let cogReady = false;
+        let cogLoadingPromise = null;
         let hasFocusedRasterView = false;
         let currentZoom = INITIAL_VIEW_STATE.zoom;
+        let geotiffModulePromise = null;
 
         const AREA_COLOR_RANGE = [[0,0,4],[40,11,84],[101,21,110],[159,42,99],[212,72,66],[245,125,21],[252,253,191]];
         const HEX_COLOR_RANGE = [[236,245,232],[204,227,205],[150,199,186],[92,160,168],[46,112,141],[20,67,108],[9,35,69]];
@@ -497,6 +499,13 @@
             return startBias - (startBias - 1) * eased;
         }
 
+        async function getGeoTIFFModule() {
+            if (!geotiffModulePromise) {
+                geotiffModulePromise = import('https://esm.sh/geotiff@2.1.3');
+            }
+            return geotiffModulePromise;
+        }
+
         async function buildCogTileLayer({
             id,
             url,
@@ -505,7 +514,7 @@
             resampleMethod = 'nearest',
             overviewBiasForViewZoom = () => 1
         }) {
-            const { fromUrl } = await import('https://esm.sh/geotiff@2.1.3');
+            const { fromUrl } = await getGeoTIFFModule();
             const TILE_SIZE = 256;
             const tiff = await fromUrl(url);
             const imageCount = await tiff.getImageCount();
@@ -514,15 +523,12 @@
                 if (!imgCache[i]) imgCache[i] = await tiff.getImage(i);
                 return imgCache[i];
             }
-            const base    = await getImg(0);
+            const images  = await Promise.all(Array.from({ length: imageCount }, (_, i) => getImg(i)));
+            const base    = images[0];
             const cogBbox = base.getBoundingBox();
             const spanX   = cogBbox[2] - cogBbox[0];
             const spanY   = cogBbox[3] - cogBbox[1];
-            const ovMeta  = [];
-            for (let i = 0; i < imageCount; i++) {
-                const img = await getImg(i);
-                ovMeta.push({ i, res: spanX / img.getWidth(), w: img.getWidth(), h: img.getHeight() });
-            }
+            const ovMeta  = images.map((img, i) => ({ i, res: spanX / img.getWidth(), w: img.getWidth(), h: img.getHeight() }));
             ovMeta.sort((a, b) => a.res - b.res);
             function pickOv(targetRes) {
                 let pick = ovMeta[0];
@@ -584,7 +590,7 @@
                 id,
                 getTileData,
                 tileSize: TILE_SIZE,
-                maxRequests: 6,
+                maxRequests: 10,
                 minZoom: 4,
                 maxZoom: 16,
                 renderSubLayers(props) {
@@ -596,7 +602,7 @@
         }
 
         async function buildStaticCogBitmapLayer({ id, url, lut, valueFloor = 0, valueCeil = 1, valueGamma = 1 }) {
-            const { fromUrl } = await import('https://esm.sh/geotiff@2.1.3');
+            const { fromUrl } = await getGeoTIFFModule();
             const tiff = await fromUrl(url);
             const img = await tiff.getImage(0);
             const bbox = img.getBoundingBox();
@@ -636,28 +642,58 @@
 
         async function ensureCogLayer() {
             if (cogReady) return;
-            fineCogLayer = await buildCogTileLayer({
-                id: 'probability-cog-fine',
-                url: FINE_COG_URL,
-                lut: PLASMA_LUT,
-                useOverviews: true,
-                resampleMethod: 'nearest',
-                overviewBiasForViewZoom: (zoom) => getFineRasterOverviewBias(zoom)
-            });
-            try {
-                coarseRasterLayer = await buildStaticCogBitmapLayer({
-                    id: 'probability-cog-coarse',
-                    url: COARSE_COG_URL,
-                    lut: COARSE_PLASMA_LUT,
-                    valueFloor: 0.04,
-                    valueCeil: 0.5,
-                    valueGamma: 1.05
+            if (!cogLoadingPromise) {
+                cogLoadingPromise = (async () => {
+                    const [fineResult, coarseResult] = await Promise.allSettled([
+                        buildCogTileLayer({
+                            id: 'probability-cog-fine',
+                            url: FINE_COG_URL,
+                            lut: PLASMA_LUT,
+                            useOverviews: true,
+                            resampleMethod: 'nearest',
+                            overviewBiasForViewZoom: (zoom) => getFineRasterOverviewBias(zoom)
+                        }),
+                        buildStaticCogBitmapLayer({
+                            id: 'probability-cog-coarse',
+                            url: COARSE_COG_URL,
+                            lut: COARSE_PLASMA_LUT,
+                            valueFloor: 0.04,
+                            valueCeil: 0.5,
+                            valueGamma: 1.05
+                        })
+                    ]);
+                    if (fineResult.status !== 'fulfilled') {
+                        throw fineResult.reason;
+                    }
+                    fineCogLayer = fineResult.value;
+                    if (coarseResult.status === 'fulfilled') {
+                        coarseRasterLayer = coarseResult.value;
+                    } else {
+                        console.warn('Low-zoom coarse raster unavailable, using fine raster only.', coarseResult.reason);
+                        coarseRasterLayer = null;
+                    }
+                    cogReady = true;
+                })().catch((error) => {
+                    cogLoadingPromise = null;
+                    throw error;
                 });
-            } catch (error) {
-                console.warn('Low-zoom coarse raster unavailable, using fine raster only.', error);
-                coarseRasterLayer = null;
             }
-            cogReady = true;
+            return cogLoadingPromise;
+        }
+
+        function prewarmCogLayer() {
+            if (cogReady || cogLoadingPromise) return;
+            ensureCogLayer().catch((error) => {
+                console.warn('Background COG preload failed.', error);
+            });
+        }
+
+        function scheduleCogPrewarm() {
+            if (typeof window.requestIdleCallback === 'function') {
+                window.requestIdleCallback(() => prewarmCogLayer(), { timeout: 2500 });
+                return;
+            }
+            window.setTimeout(() => prewarmCogLayer(), 1200);
         }
 
         // Format polygon popup: selected stats only, bold label on left like density info pane
@@ -1036,6 +1072,7 @@
                         document.getElementById('loading').textContent = '❌ Failed to load COG: ' + err.message;
                     }
                 });
+                scheduleCogPrewarm();
                 const lvNames = ['Grade 1–2', 'Grade 3', 'Grade 4–5'];
                 document.getElementById('lv-12').addEventListener('click', () => {
                     potentialLandValueClass = 0;
