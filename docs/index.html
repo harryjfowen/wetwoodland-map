@@ -396,7 +396,8 @@
         )`;
         const FINE_COG_URL = './wetwoodland_probability.cog.bin?v=20260324-zoomblend';
         const COARSE_COG_URL = './wetwoodland_probability_1km.cog.bin?v=20260324-zoomblend-mask1';
-        const RASTER_SWITCH_ZOOM = 7.6;
+        const RASTER_BLEND_START_ZOOM = 7.3;
+        const RASTER_BLEND_END_ZOOM = 8.0;
 
         // Control state
         let heightExponent = 1.5;
@@ -458,9 +459,9 @@
         })();
         const COARSE_PLASMA_LUT = (() => {
             const S = [
-                [0.00,[236,245,232,0]],[0.01,[236,245,232,170]],[0.06,[204,227,205,215]],
-                [0.18,[150,199,186,235]],[0.40,[92,160,168,245]],[0.70,[46,112,141,252]],
-                [1.00,[9,35,69,255]]
+                [0.00,[236,245,232,0]],[0.08,[236,245,232,0]],[0.18,[204,227,205,85]],
+                [0.38,[150,199,186,135]],[0.60,[92,160,168,185]],[0.82,[46,112,141,220]],
+                [1.00,[9,35,69,236]]
             ];
             const a = new Uint8ClampedArray(256*4);
             for (let i = 0; i < 256; i++) {
@@ -478,8 +479,11 @@
         const _mToLon = x => x * 180 / (Math.PI * _R);
         const _mToLat = y => (2 * Math.atan(Math.exp(y / _R)) - Math.PI / 2) * 180 / Math.PI;
 
-        function isCoarseRasterZoom(zoom) {
-            return zoom < RASTER_SWITCH_ZOOM;
+        function getRasterBlend(zoom) {
+            if (zoom <= RASTER_BLEND_START_ZOOM) return { coarseOpacity: 1, fineOpacity: 0 };
+            if (zoom >= RASTER_BLEND_END_ZOOM) return { coarseOpacity: 0, fineOpacity: 1 };
+            const t = (zoom - RASTER_BLEND_START_ZOOM) / (RASTER_BLEND_END_ZOOM - RASTER_BLEND_START_ZOOM);
+            return { coarseOpacity: 1 - t, fineOpacity: t };
         }
 
         async function buildCogTileLayer({ id, url, lut, useOverviews = true, resampleMethod = 'nearest' }) {
@@ -571,7 +575,7 @@
             });
         }
 
-        async function buildStaticCogBitmapLayer({ id, url, lut, valueCeil = 1, valueGamma = 1 }) {
+        async function buildStaticCogBitmapLayer({ id, url, lut, valueFloor = 0, valueCeil = 1, valueGamma = 1 }) {
             const { fromUrl } = await import('https://esm.sh/geotiff@2.1.3');
             const tiff = await fromUrl(url);
             const img = await tiff.getImage(0);
@@ -584,7 +588,9 @@
             for (let i = 0; i < band.length; i++) {
                 const v = band[i];
                 if (v >= 255) continue;
-                const normalized = Math.max(0, Math.min(1, (v / 254) / valueCeil));
+                const raw = v / 254;
+                if (raw <= valueFloor) continue;
+                const normalized = Math.max(0, Math.min(1, (raw - valueFloor) / Math.max(1e-6, valueCeil - valueFloor)));
                 const mapped = Math.pow(normalized, valueGamma);
                 const idx = Math.min(255, Math.round(mapped * 255)) * 4;
                 rgba[i * 4] = lut[idx];
@@ -622,8 +628,9 @@
                     id: 'probability-cog-coarse',
                     url: COARSE_COG_URL,
                     lut: COARSE_PLASMA_LUT,
-                    valueCeil: 0.35,
-                    valueGamma: 0.7
+                    valueFloor: 0.04,
+                    valueCeil: 0.5,
+                    valueGamma: 1.05
                 });
             } catch (error) {
                 console.warn('Low-zoom coarse raster unavailable, using fine raster only.', error);
@@ -837,11 +844,15 @@
             }
             if (viewMode === 'raster' && (fineCogLayer || coarseRasterLayer)) {
                 if (!coarseRasterLayer && fineCogLayer) return [fineCogLayer.clone({ opacity: 1 })];
-                if (isCoarseRasterZoom(currentZoom) && coarseRasterLayer) {
-                    return [coarseRasterLayer.clone({ opacity: 0.98 })];
+                const { coarseOpacity, fineOpacity } = getRasterBlend(currentZoom);
+                const layers = [];
+                if (coarseRasterLayer && coarseOpacity > 0.001) {
+                    layers.push(coarseRasterLayer.clone({ opacity: coarseOpacity }));
                 }
-                if (fineCogLayer) return [fineCogLayer.clone({ opacity: 1 })];
-                return coarseRasterLayer ? [coarseRasterLayer.clone({ opacity: 0.98 })] : [];
+                if (fineCogLayer && fineOpacity > 0.001) {
+                    layers.push(fineCogLayer.clone({ opacity: fineOpacity }));
+                }
+                return layers;
             }
             return [];
         }
