@@ -487,13 +487,23 @@
             return { coarseOpacity: 1 - eased, fineOpacity: eased };
         }
 
+        function getFineRasterOverviewBias(zoom) {
+            const startBias = 2.15;
+            const settleZoom = RASTER_BLEND_END_ZOOM + 0.7;
+            if (zoom <= RASTER_BLEND_START_ZOOM) return startBias;
+            if (zoom >= settleZoom) return 1;
+            const t = (zoom - RASTER_BLEND_START_ZOOM) / (settleZoom - RASTER_BLEND_START_ZOOM);
+            const eased = t * t * (3 - 2 * t);
+            return startBias - (startBias - 1) * eased;
+        }
+
         async function buildCogTileLayer({
             id,
             url,
             lut,
             useOverviews = true,
             resampleMethod = 'nearest',
-            overviewBiasForTileZoom = () => 1
+            overviewBiasForViewZoom = () => 1
         }) {
             const { fromUrl } = await import('https://esm.sh/geotiff@2.1.3');
             const TILE_SIZE = 256;
@@ -529,7 +539,7 @@
                 const overlapSouth = Math.max(south, cogBbox[1]);
                 if (overlapEast<=overlapWest || overlapNorth<=overlapSouth) return null;
                 const tileZoom = index?.z ?? 0;
-                const overviewBias = overviewBiasForTileZoom(tileZoom);
+                const overviewBias = overviewBiasForViewZoom(currentZoom, tileZoom);
                 const meta = useOverviews ? pickOv(((east-west)/TILE_SIZE) * overviewBias) : ovMeta[0];
                 const img  = await getImg(meta.i);
                 const resX = spanX/meta.w, resY = spanY/meta.h;
@@ -632,11 +642,7 @@
                 lut: PLASMA_LUT,
                 useOverviews: true,
                 resampleMethod: 'nearest',
-                overviewBiasForTileZoom: (z) => {
-                    if (z <= 8) return 1.7;
-                    if (z === 9) return 1.35;
-                    return 1;
-                }
+                overviewBiasForViewZoom: (zoom) => getFineRasterOverviewBias(zoom)
             });
             try {
                 coarseRasterLayer = await buildStaticCogBitmapLayer({
