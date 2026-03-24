@@ -42,6 +42,7 @@ TARGETS = {
         "out": "docs/wetwoodland_probability_1km.cog.bin",
         "resolution": 1000,
         "resampling": Resampling.average,
+        "min_valid_fraction": 0.5,
     },
     "extent": {
         "src": "data/wetwoodland_extent.tif",
@@ -129,6 +130,46 @@ def quantize_to_uint8(src_path: Path, dst_path: Path) -> None:
                 dst.write(out, 1, window=window)
 
 
+def apply_valid_fraction_mask(
+    source_path: Path,
+    warped_path: Path,
+    min_valid_fraction: float,
+) -> None:
+    """
+    Drop coarse cells that are only weakly supported by valid source data.
+
+    This prevents the low-zoom aggregate from bleeding beyond the England mask
+    along the coastline, where an averaged 1 km cell may only contain a small
+    sliver of valid pixels.
+    """
+    with rasterio.open(source_path) as src, rasterio.open(warped_path, "r+") as dst:
+        src_band = src.read(1, masked=False)
+        valid = np.isfinite(src_band)
+        if src.nodata is not None:
+            valid &= src_band != float(src.nodata)
+        valid_src = valid.astype(np.uint8)
+
+        coverage = np.zeros((dst.height, dst.width), dtype=np.float32)
+        reproject(
+            source=valid_src,
+            destination=coverage,
+            src_transform=src.transform,
+            src_crs=src.crs,
+            dst_transform=dst.transform,
+            dst_crs=dst.crs,
+            src_nodata=None,
+            dst_nodata=0.0,
+            resampling=Resampling.average,
+        )
+
+        data = dst.read(1)
+        dst_nodata = dst.nodata
+        if dst_nodata is None:
+            raise ValueError("Expected warped raster to carry nodata for coverage masking.")
+        data[coverage < min_valid_fraction] = dst_nodata
+        dst.write(data, 1)
+
+
 def add_overviews(path: Path) -> None:
     """Build internal overviews with nearest sampling to preserve nodata edges."""
     with rasterio.open(path, "r+") as ds:
@@ -182,6 +223,11 @@ def build(name: str, overwrite: bool = False) -> None:
             resolution=cfg.get("resolution"),
             resampling=cfg.get("resampling", Resampling.nearest),
         )
+
+        min_valid_fraction = cfg.get("min_valid_fraction")
+        if min_valid_fraction is not None:
+            print(f"[{name}] Applying valid-coverage mask …")
+            apply_valid_fraction_mask(src_path, warped, float(min_valid_fraction))
 
         print(f"[{name}] Quantizing to uint8 …")
         quantize_to_uint8(warped, quantized)
