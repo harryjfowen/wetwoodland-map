@@ -147,7 +147,7 @@ if __name__ == "__main__":
         default="docs/wet_woodland_hexagons.geojson",
         help="Output GeoJSON (use docs/ for the web app)",
     )
-    parser.add_argument("--resolution", type=int, default=8, help="H3 resolution (7=~5km, 8=~1.2km, 9=~500m)")
+    parser.add_argument("--resolution", type=int, default=7, help="H3 resolution (7=~5km, 8=~1.2km, 9=~500m)")
     parser.add_argument(
         "--threshold",
         type=float,

@@ -306,7 +306,7 @@
 
     <div id="info">
         <h2>🌲 Wet Woodland Distribution</h2>
-        <p style="margin-bottom: 12px; font-size: 12px;">3D hexagon visualization across England</p>
+        <p style="margin-bottom: 12px; font-size: 12px;">Coarse 5km hexagon density view across England</p>
 
         <p style="margin: 8px 0 4px 0; font-weight: 600; font-size: 13px;">Coverage Statistics</p>
         <p style="margin: 3px 0; font-size: 12px;"><strong>Total area:</strong> 225,335 ha (2,253 km²)</p>
@@ -366,7 +366,7 @@
             transitionDuration: 1200
         };
 
-        const DENSITY_GRADIENT = `linear-gradient(to right,
+        const AREA_GRADIENT = `linear-gradient(to right,
             rgb(0, 0, 4),
             rgb(40, 11, 84),
             rgb(101, 21, 110),
@@ -419,10 +419,11 @@
         let hasFocusedRasterView = false;
         let currentZoom = INITIAL_VIEW_STATE.zoom;
 
-        const DENSITY_COLOR_RANGE = [[0,0,4],[40,11,84],[101,21,110],[159,42,99],[212,72,66],[245,125,21],[252,253,191]];
+        const AREA_COLOR_RANGE = [[0,0,4],[40,11,84],[101,21,110],[159,42,99],[212,72,66],[245,125,21],[252,253,191]];
+        const HEX_COLOR_RANGE = [[236,245,232],[204,227,205],[150,199,186],[92,160,168],[46,112,141],[20,67,108],[9,35,69]];
         const POTENTIAL_COLOR_RANGE = [[48,18,59],[50,85,222],[35,171,216],[39,214,129],[171,236,52],[250,193,39],[245,94,24],[144,12,0]];
 
-        function densityToColor(value, minVal, maxVal, alpha = 200, scaleMode = 'linear') {
+        function interpolateColorRange(value, minVal, maxVal, colorRange, alpha = 200, scaleMode = 'linear') {
             const range = maxVal - minVal;
             let normalized = range <= 0 ? 0 : (value - minVal) / range;
             normalized = Math.max(0, Math.min(1, normalized));
@@ -430,11 +431,11 @@
                 const shifted = Math.max(0, value - minVal);
                 normalized = Math.log1p(shifted) / Math.log1p(range);
             }
-            const position = Math.max(0, Math.min(1, normalized)) * (DENSITY_COLOR_RANGE.length - 1);
+            const position = Math.max(0, Math.min(1, normalized)) * (colorRange.length - 1);
             const i = Math.floor(position);
-            const j = Math.min(i + 1, DENSITY_COLOR_RANGE.length - 1);
+            const j = Math.min(i + 1, colorRange.length - 1);
             const t = position - i;
-            const c = (idx) => Math.floor(DENSITY_COLOR_RANGE[i][idx] + (DENSITY_COLOR_RANGE[j][idx] - DENSITY_COLOR_RANGE[i][idx]) * t);
+            const c = (idx) => Math.floor(colorRange[i][idx] + (colorRange[j][idx] - colorRange[i][idx]) * t);
             return [c(0), c(1), c(2), alpha];
         }
 
@@ -725,7 +726,7 @@
 
             if (mode === 'hexagons') {
                 legendTitle.textContent = 'Wet Woodland Density';
-                legendGradient.style.background = DENSITY_GRADIENT;
+                legendGradient.style.background = PLASMA_GRADIENT;
                 legendLabels.innerHTML = '<span>Low</span><span>High</span>';
                 document.getElementById('landvalue-toggle').style.display = 'none';
                 return;
@@ -733,7 +734,7 @@
 
             if (mode === 'polygons') {
                 legendTitle.textContent = 'Wet woodland area (ha)';
-                legendGradient.style.background = DENSITY_GRADIENT;
+                legendGradient.style.background = AREA_GRADIENT;
                 legendLabels.innerHTML = '<span>Low</span><span>High</span>';
                 document.getElementById('landvalue-toggle').style.display = 'none';
                 return;
@@ -793,9 +794,9 @@
                     filled: true,
                     extruded: true,
                     wireframe: false,
-                    material: { ambient: 0.45, diffuse: 0.7, shininess: 18, specularColor: [40, 40, 40] },
-                    getElevation: f => Math.pow(f.properties.count, heightExponent) * 50,
-                    getFillColor: f => densityToColor(f.properties.count, minCount, maxCount, 220, 'log'),
+                    material: { ambient: 0.5, diffuse: 0.65, shininess: 12, specularColor: [30, 30, 30] },
+                    getElevation: f => Math.pow(f.properties.count, heightExponent) * 10,
+                    getFillColor: f => interpolateColorRange(f.properties.count, minCount, maxCount, HEX_COLOR_RANGE, 220, 'log'),
                     pickable: true,
                     autoHighlight: true,
                     highlightColor: [255, 255, 255, 100]
@@ -808,7 +809,7 @@
                     stroked: true,
                     filled: true,
                     extruded: false,
-                    getFillColor: f => densityToColor(f.properties.total_area_ha ?? 0, polygonMinDensity, polygonMaxDensity, 128),
+                    getFillColor: f => interpolateColorRange(f.properties.total_area_ha ?? 0, polygonMinDensity, polygonMaxDensity, AREA_COLOR_RANGE, 128),
                     getLineColor: [0, 0, 0, 255],
                     lineWidthMinPixels: 1,
                     pickable: true,
@@ -880,8 +881,7 @@
                         if (!object) return null;
                         if (viewMode === 'hexagons' && object.properties.count != null) {
                             const count = object.properties.count;
-                            const hectares = (count * 0.01).toFixed(2);
-                            return { html: `<div style="background: rgba(0,0,0,0.9); padding: 10px; border-radius: 5px;"><strong>Wet Woodland:</strong> ${count.toLocaleString()} pixels<br><strong>Area:</strong> ${hectares} ha</div>`, style: { fontSize: '12px', color: 'white' } };
+                            return { html: `<div style="background: rgba(0,0,0,0.9); padding: 10px; border-radius: 5px;"><strong>Wet Woodland Density:</strong> ${count.toLocaleString()} sampled pixels<br><strong>Hex size:</strong> ~5km</div>`, style: { fontSize: '12px', color: 'white' } };
                         }
                         if (viewMode === 'polygons' && object.properties) {
                             const name = object.properties.Name || object.properties.LNRS_ID || 'Region';
