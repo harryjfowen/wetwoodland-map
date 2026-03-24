@@ -34,19 +34,34 @@ TARGETS = {
         "band": 1,
         "out": "docs/wetwoodland_probability.cog.bin",
         "resolution": 30,
+        "resampling": Resampling.nearest,
+    },
+    "probability_coarse": {
+        "src": "data/wet_woodland_potential.tif",
+        "band": 1,
+        "out": "docs/wetwoodland_probability_1km.cog.bin",
+        "resolution": 1000,
+        "resampling": Resampling.average,
     },
     "extent": {
         "src": "data/wetwoodland_extent.tif",
         "band": 2,
         "out": "docs/wetwoodland_extent_b2.cog.bin",
         "resolution": None,
+        "resampling": Resampling.nearest,
     },
 }
 
 OVERVIEW_FACTORS = [2, 4, 8, 16, 32, 64, 128]
 
 
-def warp_band_to_3857(src_path: Path, band: int, dst_path: Path, resolution: float | None = None) -> None:
+def warp_band_to_3857(
+    src_path: Path,
+    band: int,
+    dst_path: Path,
+    resolution: float | None = None,
+    resampling: Resampling = Resampling.nearest,
+) -> None:
     """Reproject a single band to EPSG:3857, write float32 GeoTIFF."""
     with rasterio.open(src_path) as src:
         src_nodata = src.nodata
@@ -79,9 +94,7 @@ def warp_band_to_3857(src_path: Path, band: int, dst_path: Path, resolution: flo
                 dst_transform=transform,
                 dst_crs=EPSG_3857,
                 dst_nodata=src_nodata,
-                # Preserve the original 100 m cell edges so the web COG stays sharp
-                # and compressible when published at a finer 30 m grid.
-                resampling=Resampling.nearest,
+                resampling=resampling,
             )
 
 
@@ -162,7 +175,13 @@ def build(name: str, overwrite: bool = False) -> None:
         warped = tmp / "warped.tif"
         quantized = tmp / "quantized.tif"
 
-        warp_band_to_3857(src_path, cfg["band"], warped, resolution=cfg.get("resolution"))
+        warp_band_to_3857(
+            src_path,
+            cfg["band"],
+            warped,
+            resolution=cfg.get("resolution"),
+            resampling=cfg.get("resampling", Resampling.nearest),
+        )
 
         print(f"[{name}] Quantizing to uint8 …")
         quantize_to_uint8(warped, quantized)

@@ -394,7 +394,10 @@
             rgb(20, 67, 108),
             rgb(9, 35, 69)
         )`;
-        const COG_URL = './wetwoodland_probability.cog.bin?v=20260323-sharp30';
+        const FINE_COG_URL = './wetwoodland_probability.cog.bin?v=20260324-zoomblend';
+        const COARSE_COG_URL = './wetwoodland_probability_1km.cog.bin?v=20260324-zoomblend';
+        const RASTER_BLEND_START_ZOOM = 6.6;
+        const RASTER_BLEND_END_ZOOM = 7.4;
 
         // Control state
         let heightExponent = 1.0;
@@ -411,9 +414,11 @@
         let maxCount = 0;
         let minCount = 0;
         let deckgl = null;
-        let cogLayer = null;
+        let fineCogLayer = null;
+        let coarseCogLayer = null;
         let cogReady = false;
         let hasFocusedRasterView = false;
+        let currentZoom = INITIAL_VIEW_STATE.zoom;
 
         const DENSITY_COLOR_RANGE = [[0,0,4],[40,11,84],[101,21,110],[159,42,99],[212,72,66],[245,125,21],[252,253,191]];
         const POTENTIAL_COLOR_RANGE = [[48,18,59],[50,85,222],[35,171,216],[39,214,129],[171,236,52],[250,193,39],[245,94,24],[144,12,0]];
@@ -451,15 +456,37 @@
             }
             return a;
         })();
+        const COARSE_PLASMA_LUT = (() => {
+            const S = [
+                [0.00,[236,245,232,0]],[0.03,[236,245,232,110]],[0.12,[204,227,205,180]],
+                [0.28,[150,199,186,214]],[0.50,[92,160,168,230]],[0.76,[46,112,141,244]],
+                [1.00,[9,35,69,255]]
+            ];
+            const a = new Uint8ClampedArray(256*4);
+            for (let i = 0; i < 256; i++) {
+                const t = i/255;
+                let s0=S[0], s1=S[1];
+                for (let j=1;j<S.length;j++) { if(t<=S[j][0]){s0=S[j-1];s1=S[j];break;} s0=S[j];s1=S[j]; }
+                const f = s0[0]===s1[0] ? 1 : (t-s0[0])/(s1[0]-s0[0]);
+                for (let c=0;c<4;c++) a[i*4+c]=Math.round(s0[1][c]+f*(s1[1][c]-s0[1][c]));
+            }
+            return a;
+        })();
         const _R = 6378137;
         const _lonToM = lon => lon * Math.PI * _R / 180;
         const _latToM = lat => Math.log(Math.tan(Math.PI/4 + lat*Math.PI/360)) * _R;
 
-        async function ensureCogLayer() {
-            if (cogReady) return;
+        function getRasterBlend(zoom) {
+            if (zoom <= RASTER_BLEND_START_ZOOM) return { coarseOpacity: 1, fineOpacity: 0 };
+            if (zoom >= RASTER_BLEND_END_ZOOM) return { coarseOpacity: 0, fineOpacity: 1 };
+            const t = (zoom - RASTER_BLEND_START_ZOOM) / (RASTER_BLEND_END_ZOOM - RASTER_BLEND_START_ZOOM);
+            return { coarseOpacity: 1 - t, fineOpacity: t };
+        }
+
+        async function buildCogTileLayer({ id, url, lut }) {
             const { fromUrl } = await import('https://esm.sh/geotiff@2.1.3');
             const TILE_SIZE = 256;
-            const tiff = await fromUrl(COG_URL);
+            const tiff = await fromUrl(url);
             const imageCount = await tiff.getImageCount();
             const imgCache = new Array(imageCount);
             async function getImg(i) {
@@ -481,7 +508,6 @@
                 for (const m of ovMeta) { if (m.res <= 2*targetRes) pick=m; else break; }
                 return pick;
             }
-            const lut = PLASMA_LUT;
             async function getTileData({ bbox }) {
                 const west=_lonToM(bbox.west), east=_lonToM(bbox.east);
                 const north=_latToM(bbox.north), south=_latToM(bbox.south);
@@ -510,8 +536,8 @@
                 canvas.getContext('2d').putImageData(new ImageData(rgba,TILE_SIZE,TILE_SIZE),0,0);
                 return canvas;
             }
-            cogLayer = new deck.TileLayer({
-                id: 'probability-cog',
+            return new deck.TileLayer({
+                id,
                 getTileData,
                 tileSize: TILE_SIZE,
                 maxRequests: 6,
@@ -523,6 +549,25 @@
                     return new deck.BitmapLayer({...props, data:null, image:props.data, bounds:[west,south,east,north]});
                 }
             });
+        }
+
+        async function ensureCogLayer() {
+            if (cogReady) return;
+            fineCogLayer = await buildCogTileLayer({
+                id: 'probability-cog-fine',
+                url: FINE_COG_URL,
+                lut: PLASMA_LUT
+            });
+            try {
+                coarseCogLayer = await buildCogTileLayer({
+                    id: 'probability-cog-coarse',
+                    url: COARSE_COG_URL,
+                    lut: COARSE_PLASMA_LUT
+                });
+            } catch (error) {
+                console.warn('Low-zoom coarse raster unavailable, using fine raster only.', error);
+                coarseCogLayer = null;
+            }
             cogReady = true;
         }
 
@@ -667,11 +712,12 @@
             document.getElementById('info').style.display = mode === 'hexagons' ? 'block' : 'none';
             if (mode === 'polygons') hidePolygonPopup();
             if (mode !== 'polygons') hidePolygonPopup();
-            updateLayers();
             if (mode === 'raster' && deckgl && !hasFocusedRasterView) {
+                currentZoom = DEVON_RASTER_VIEW_STATE.zoom;
                 deckgl.setProps({ initialViewState: DEVON_RASTER_VIEW_STATE });
                 hasFocusedRasterView = true;
             }
+            updateLayers();
         }
 
         function getLayers() {
@@ -728,7 +774,18 @@
                     colorRange: POTENTIAL_COLOR_RANGE
                 })];
             }
-            if (viewMode === 'raster' && cogLayer) return [cogLayer];
+            if (viewMode === 'raster' && (fineCogLayer || coarseCogLayer)) {
+                if (!coarseCogLayer && fineCogLayer) return [fineCogLayer.clone({ opacity: 1 })];
+                const { coarseOpacity, fineOpacity } = getRasterBlend(currentZoom);
+                const rasterLayers = [];
+                if (coarseCogLayer && coarseOpacity > 0.001) {
+                    rasterLayers.push(coarseCogLayer.clone({ opacity: coarseOpacity }));
+                }
+                if (fineCogLayer && fineOpacity > 0.001) {
+                    rasterLayers.push(fineCogLayer.clone({ opacity: fineOpacity }));
+                }
+                return rasterLayers;
+            }
             return [];
         }
 
@@ -778,6 +835,12 @@
                     },
                     onClick: ({ object }) => {
                         if (viewMode === 'polygons' && object && object.properties) showPolygonPopup(object);
+                    },
+                    onViewStateChange: ({ viewState }) => {
+                        if (!viewState || typeof viewState.zoom !== 'number') return;
+                        const zoomChanged = Math.abs(viewState.zoom - currentZoom) > 0.02;
+                        currentZoom = viewState.zoom;
+                        if (viewMode === 'raster' && zoomChanged) updateLayers();
                     }
                 });
 
