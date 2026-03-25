@@ -518,16 +518,11 @@
             };
         }
 
-        function getFineRasterOverviewBias(zoom) {
-            const startBias = 2.15;
-            const settleZoom = RASTER_COARSE_FADE_END_ZOOM + 0.45;
-            if (zoom <= RASTER_BLEND_START_ZOOM) return startBias;
-            if (zoom >= settleZoom) return 1;
-            const eased = smoothstep01(
-                (zoom - RASTER_BLEND_START_ZOOM) /
-                Math.max(1e-6, settleZoom - RASTER_BLEND_START_ZOOM)
-            );
-            return startBias - (startBias - 1) * eased;
+        function getFineRasterOverviewBias(_zoom) {
+            // Let the fine COG choose its normal overview level.
+            // The earlier handoff-specific coarse bias made sparse extent pixels
+            // disappear just as the 1 km layer faded out.
+            return 1;
         }
 
         function formatHa(ha, decimals = 0) {
