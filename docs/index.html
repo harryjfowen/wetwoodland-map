@@ -420,6 +420,7 @@
         let viewMode = 'hexagons';  // 'hexagons' | 'polygons' | 'potential' | 'raster'
         let hexagonData = null;
         let polygonData = null;
+        let polygonLoadingPromise = null;
         let potentialPoints = null;  // [lon, lat, value] or [lon, lat, value, landClass] for HeatmapLayer
         let potentialLandValueClass = 0;  // 0=1-2, 1=3, 2=4-5 (only used when points have 4 elements)
         let polygonMinDensity = 0;
@@ -582,6 +583,41 @@
             } catch (error) {
                 console.warn('Failed to load national summary stats.', error);
             }
+        }
+
+        async function loadPolygonData() {
+            if (polygonData) return polygonData;
+            if (!polygonLoadingPromise) {
+                polygonLoadingPromise = fetch('wet_woodland_lnrs_regions.geojson?v=20260325-web')
+                    .then(response => {
+                        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                        return response.json();
+                    })
+                    .then(geo => {
+                        polygonData = geo;
+                        const densities = geo.features.map(f => f.properties.total_area_ha ?? 0);
+                        polygonMinDensity = densities.length ? Math.min(...densities) : 0;
+                        polygonMaxDensity = densities.length ? Math.max(...densities) : 1;
+                        if (polygonMaxDensity === polygonMinDensity) polygonMaxDensity = polygonMinDensity + 1;
+                        return geo;
+                    })
+                    .catch(error => {
+                        polygonLoadingPromise = null;
+                        throw error;
+                    });
+            }
+            return polygonLoadingPromise;
+        }
+
+        function schedulePolygonPrewarm() {
+            const kick = () => loadPolygonData().catch((error) => {
+                console.warn('Background LNRS preload failed.', error);
+            });
+            if (typeof window.requestIdleCallback === 'function') {
+                window.requestIdleCallback(kick, { timeout: 3000 });
+                return;
+            }
+            window.setTimeout(kick, 1500);
         }
 
         async function getGeoTIFFModule() {
@@ -1087,14 +1123,8 @@
                     } else {
                         document.getElementById('loading').style.display = 'block';
                         document.getElementById('loading').textContent = 'Loading LNRS regions...';
-                        fetch('wet_woodland_lnrs_regions.geojson')
-                            .then(r => r.json())
-                            .then(geo => {
-                                polygonData = geo;
-                                const densities = geo.features.map(f => f.properties.total_area_ha ?? 0);
-                                polygonMinDensity = densities.length ? Math.min(...densities) : 0;
-                                polygonMaxDensity = densities.length ? Math.max(...densities) : 1;
-                                if (polygonMaxDensity === polygonMinDensity) polygonMaxDensity = polygonMinDensity + 1;
+                        loadPolygonData()
+                            .then(() => {
                                 document.getElementById('loading').style.display = 'none';
                                 setViewMode('polygons');
                             })
@@ -1157,6 +1187,7 @@
                     }
                 });
                 loadNationalSummary();
+                schedulePolygonPrewarm();
                 scheduleCogPrewarm();
                 const lvNames = ['Grade 1–2', 'Grade 3', 'Grade 4–5'];
                 document.getElementById('lv-12').addEventListener('click', () => {
