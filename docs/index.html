@@ -397,7 +397,6 @@
         const FINE_COG_URL = './wetwoodland_extent_b2.cog.bin?v=20260324-extent-refresh';
         const COARSE_COG_URL = './wetwoodland_extent_b2_1km.cog.bin?v=20260324-extent-refresh';
         const RASTER_BLEND_START_ZOOM = 7.9;
-        const RASTER_FINE_FULL_ZOOM = 8.4;
         const RASTER_COARSE_FADE_END_ZOOM = 9.1;
         const EXTENT_FINE_STYLE = {
             valueFloor: 0,
@@ -459,9 +458,9 @@
         // Forest-style LUT: pale green through teal into deep blue.
         const PLASMA_LUT = (() => {
             const S = [
-                [0.00,[236,245,232,0]],[0.08,[236,245,232,40]],[0.22,[204,227,205,110]],
-                [0.40,[150,199,186,150]],[0.58,[92,160,168,185]],[0.78,[46,112,141,220]],
-                [1.00,[9,35,69,245]]
+                [0.00,[236,245,232,0]],[0.05,[236,245,232,255]],[0.22,[204,227,205,255]],
+                [0.40,[150,199,186,255]],[0.58,[92,160,168,255]],[0.78,[46,112,141,255]],
+                [1.00,[9,35,69,255]]
             ];
             const a = new Uint8ClampedArray(256*4);
             for (let i = 0; i < 256; i++) {
@@ -501,21 +500,17 @@
         }
 
         function getRasterBlend(zoom) {
-            if (zoom <= RASTER_BLEND_START_ZOOM) return { coarseOpacity: 1, fineOpacity: 0 };
+            if (zoom <= RASTER_BLEND_START_ZOOM) return { coarseOpacity: 1, fineOpacity: 1 };
             if (zoom >= RASTER_COARSE_FADE_END_ZOOM) return { coarseOpacity: 0, fineOpacity: 1 };
 
-            const fineT = smoothstep01(
-                (zoom - RASTER_BLEND_START_ZOOM) /
-                Math.max(1e-6, RASTER_FINE_FULL_ZOOM - RASTER_BLEND_START_ZOOM)
-            );
             const coarseT = smoothstep01(
-                (zoom - RASTER_FINE_FULL_ZOOM) /
-                Math.max(1e-6, RASTER_COARSE_FADE_END_ZOOM - RASTER_FINE_FULL_ZOOM)
+                (zoom - RASTER_BLEND_START_ZOOM) /
+                Math.max(1e-6, RASTER_COARSE_FADE_END_ZOOM - RASTER_BLEND_START_ZOOM)
             );
 
             return {
                 coarseOpacity: 1 - coarseT,
-                fineOpacity: fineT
+                fineOpacity: 1
             };
         }
 
