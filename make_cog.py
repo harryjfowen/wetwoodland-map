@@ -116,7 +116,12 @@ def warp_band_to_3857(
 
 def quantize_to_uint8(src_path: Path, dst_path: Path) -> None:
     """
-    Quantize float32 0-1 → uint8 1-254  (0 = transparent, 255 = nodata).
+    Quantize float32 0-1 → uint8 with 0 preserved for true zero probability,
+    1-254 for positive values, and 255 for nodata.
+
+    Zero-valued probability must remain 0 so the web renderer can keep those
+    pixels transparent. Collapsing all valid zeros into 1 makes sparse rasters
+    look washed out or effectively invisible.
     Writes a tiled DEFLATE GeoTIFF ready to receive overviews.
     """
     with rasterio.open(src_path) as src:
@@ -139,8 +144,11 @@ def quantize_to_uint8(src_path: Path, dst_path: Path) -> None:
                 if src_nodata is not None:
                     valid &= data != float(src_nodata)
                 out = np.full(data.shape, NODATA_UINT8, dtype=np.uint8)
-                out[valid] = np.clip(
-                    np.round(data[valid] * 254.0).astype(np.int32), 1, 254
+                zero = valid & (data <= 0)
+                positive = valid & (data > 0)
+                out[zero] = 0
+                out[positive] = np.clip(
+                    np.round(data[positive] * 254.0).astype(np.int32), 1, 254
                 ).astype(np.uint8)
                 dst.write(out, 1, window=window)
 
