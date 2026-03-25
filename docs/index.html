@@ -397,7 +397,8 @@
         const FINE_COG_URL = './wetwoodland_extent_b2.cog.bin?v=20260324-extent-refresh';
         const COARSE_COG_URL = './wetwoodland_extent_b2_1km.cog.bin?v=20260324-extent-refresh';
         const RASTER_BLEND_START_ZOOM = 7.9;
-        const RASTER_BLEND_END_ZOOM = 8.95;
+        const RASTER_FINE_FULL_ZOOM = 8.4;
+        const RASTER_COARSE_FADE_END_ZOOM = 9.1;
         const EXTENT_FINE_STYLE = {
             valueFloor: 0,
             valueCeil: 0.08,
@@ -493,21 +494,39 @@
         const _mToLon = x => x * 180 / (Math.PI * _R);
         const _mToLat = y => (2 * Math.atan(Math.exp(y / _R)) - Math.PI / 2) * 180 / Math.PI;
 
+        function smoothstep01(t) {
+            const clamped = Math.max(0, Math.min(1, t));
+            return clamped * clamped * (3 - 2 * clamped);
+        }
+
         function getRasterBlend(zoom) {
             if (zoom <= RASTER_BLEND_START_ZOOM) return { coarseOpacity: 1, fineOpacity: 0 };
-            if (zoom >= RASTER_BLEND_END_ZOOM) return { coarseOpacity: 0, fineOpacity: 1 };
-            const t = (zoom - RASTER_BLEND_START_ZOOM) / (RASTER_BLEND_END_ZOOM - RASTER_BLEND_START_ZOOM);
-            const eased = t * t * (3 - 2 * t);
-            return { coarseOpacity: 1 - eased, fineOpacity: eased };
+            if (zoom >= RASTER_COARSE_FADE_END_ZOOM) return { coarseOpacity: 0, fineOpacity: 1 };
+
+            const fineT = smoothstep01(
+                (zoom - RASTER_BLEND_START_ZOOM) /
+                Math.max(1e-6, RASTER_FINE_FULL_ZOOM - RASTER_BLEND_START_ZOOM)
+            );
+            const coarseT = smoothstep01(
+                (zoom - RASTER_FINE_FULL_ZOOM) /
+                Math.max(1e-6, RASTER_COARSE_FADE_END_ZOOM - RASTER_FINE_FULL_ZOOM)
+            );
+
+            return {
+                coarseOpacity: 1 - coarseT,
+                fineOpacity: fineT
+            };
         }
 
         function getFineRasterOverviewBias(zoom) {
             const startBias = 2.15;
-            const settleZoom = RASTER_BLEND_END_ZOOM + 0.7;
+            const settleZoom = RASTER_COARSE_FADE_END_ZOOM + 0.45;
             if (zoom <= RASTER_BLEND_START_ZOOM) return startBias;
             if (zoom >= settleZoom) return 1;
-            const t = (zoom - RASTER_BLEND_START_ZOOM) / (settleZoom - RASTER_BLEND_START_ZOOM);
-            const eased = t * t * (3 - 2 * t);
+            const eased = smoothstep01(
+                (zoom - RASTER_BLEND_START_ZOOM) /
+                Math.max(1e-6, settleZoom - RASTER_BLEND_START_ZOOM)
+            );
             return startBias - (startBias - 1) * eased;
         }
 
