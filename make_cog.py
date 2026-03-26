@@ -38,8 +38,8 @@ TARGETS = {
         "out": "docs/wetwoodland_probability.cog.bin",
         "resolution": 40,
         "resampling": Resampling.nearest,
-        "compress": "ZSTD",
-        "level": 15,
+        "compress": "DEFLATE",
+        "level": 9,
     },
     "probability_coarse": {
         "src": "data/wet_woodland_potential.tif",
