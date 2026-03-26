@@ -203,26 +203,10 @@ const viridisLUT = buildViridisLUT();
 // ─────────────────────────────────────────────────────────────────────────────
 const COG_URL = './wetwoodland_extent_b2.cog.bin?v=20260325-extent-zero-fix';
 
-let useNativeLayer = false;
-let COGLayer, CreateTexture, Colormap, FilterNoDataVal, GeoTIFFReader;
-
-try {
-    const rasterPkg  = await import('https://esm.sh/@developmentseed/deck.gl-raster@0.3');
-    const geotiffPkg = await import('https://esm.sh/@developmentseed/deck.gl-geotiff@0.3');
-    COGLayer        = geotiffPkg.COGLayer;
-    CreateTexture   = rasterPkg.CreateTexture;
-    Colormap        = rasterPkg.Colormap;
-    FilterNoDataVal = rasterPkg.FilterNoDataVal;
-    useNativeLayer  = !!(COGLayer && CreateTexture && Colormap);
-    if (useNativeLayer) {
-        try {
-            const gtPkg = await import('https://esm.sh/@developmentseed/geotiff@0.3');
-            GeoTIFFReader = gtPkg.GeoTIFF;
-        } catch { /* optional */ }
-    }
-} catch (e) {
-    console.warn('deck.gl-raster not available via esm.sh, using TileLayer fallback:', e.message);
-}
+// Always use the reliable geotiff.js TileLayer path.
+// The deck.gl-raster COGLayer requires a bundler and has fragile esm.sh dependency
+// chains that silently fail in production — the TileLayer fallback is equivalent.
+const useNativeLayer = false;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // deck.gl + MapLibre via UMD (loaded as globals below)
@@ -252,27 +236,7 @@ document.getElementById('stat-renderer').textContent =
     useNativeLayer ? 'deck.gl-raster COGLayer (GPU)' : 'TileLayer + geotiff.js (CPU)';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// COGLayer path (deck.gl-raster v0.3 native)
-// ─────────────────────────────────────────────────────────────────────────────
-function buildNativeCOGLayer() {
-    return new COGLayer({
-        id: 'probability-cog-native',
-        geotiff: COG_URL,
-        maxRequests: 6,
-        maxError: 0.125,
-        renderTile: (texture) => [
-            { module: CreateTexture,   props: { textureName: texture } },
-            { module: Colormap,        props: { colormapTexture: viridisLUT } },
-            { module: FilterNoDataVal, props: { value: 255 } },
-        ],
-        onGeoTIFFLoad: (_tiff, { geographicBounds }) => {
-            console.log('COG bounds (WGS84):', geographicBounds);
-        },
-    });
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// TileLayer fallback — geotiff.js, CPU viridis colormap, uint8 COG
+// TileLayer — geotiff.js, CPU viridis colormap, uint8 COG (EPSG:3857)
 // ─────────────────────────────────────────────────────────────────────────────
 async function buildFallbackLayer() {
     const { fromUrl } = await import('https://esm.sh/geotiff@2.1.3');
