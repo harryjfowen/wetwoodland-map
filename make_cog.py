@@ -53,10 +53,11 @@ TARGETS = {
         "src": "data/wet_woodland_mosaic_hysteresis.tif",
         "band": 2,
         "out": "docs/wetwoodland_extent_b2.cog.bin",
-        "resolution": 40,
+        "resolution": 25,
         "resampling": Resampling.nearest,
         "compress": "DEFLATE",
         "level": 9,
+        "overview_zero_as_nodata": True,
     },
     "extent_coarse": {
         "src": "data/wet_woodland_mosaic_hysteresis.tif",
@@ -193,13 +194,13 @@ def apply_valid_fraction_mask(
         dst.write(data, 1)
 
 
-def add_overviews(path: Path, compress: str = "DEFLATE") -> None:
-    """Build internal overviews with nearest sampling and proper compression."""
+def add_overviews(path: Path, compress: str = "DEFLATE", resampling: str = "average") -> None:
+    """Build internal overviews with proper compression."""
     import subprocess, shutil
     gdal_addo = shutil.which("gdaladdo")
     if gdal_addo:
         cmd = [
-            gdal_addo, "-r", "average",
+            gdal_addo, "-r", resampling,
             "--config", "GDAL_TIFF_OVR_BLOCKSIZE", str(TILE_SIZE),
             "--config", "COMPRESS_OVERVIEW", compress,
             "--config", "PREDICTOR_OVERVIEW", "2",
@@ -268,6 +269,13 @@ def build(name: str, overwrite: bool = False) -> None:
         print(f"[{name}] Quantizing to uint8 …")
         quantize_to_uint8(warped, quantized)
 
+        if cfg.get("overview_zero_as_nodata"):
+            print(f"[{name}] Masking zero pixels to nodata for overview averaging …")
+            with rasterio.open(quantized, "r+") as ds:
+                data = ds.read(1)
+                data[data == 0] = NODATA_UINT8
+                ds.write(data, 1)
+
         print(f"[{name}] Writing COG → {out_path}")
         # Use gdal_translate so individual targets can choose their COG settings.
         import subprocess, shutil
@@ -282,7 +290,7 @@ def build(name: str, overwrite: bool = False) -> None:
             ]
             if driver != "COG":
                 print(f"[{name}] Building overviews …")
-                add_overviews(quantized)
+                add_overviews(quantized, resampling=cfg.get("overview_resampling", "average"))
                 translate_cmd.extend(
                     [
                         "-co", "TILED=YES",

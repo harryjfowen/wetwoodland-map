@@ -756,7 +756,7 @@
 
             if (mode === 'polygons') {
                 legendTitle.textContent = 'Wet woodland area (ha)';
-                legendGradient.style.background = AREA_GRADIENT;
+                legendGradient.style.background = PLASMA_GRADIENT;
                 legendLabels.innerHTML = '<span>Low</span><span>High</span>';
                 document.getElementById('landvalue-toggle').style.display = 'none';
                 return;
@@ -766,7 +766,7 @@
                 legendTitle.textContent = hasLandValueClasses
                     ? 'Restoration suitability — ' + lvNames[potentialLandValueClass]
                     : 'Restoration suitability (0.15 – 1)';
-                legendGradient.style.background = TURBO_GRADIENT;
+                legendGradient.style.background = PLASMA_GRADIENT;
                 legendLabels.innerHTML = '<span>Low</span><span>High</span>';
                 document.getElementById('landvalue-toggle').style.display = hasLandValueClasses ? 'flex' : 'none';
                 if (hasLandValueClasses) {
@@ -795,6 +795,9 @@
             document.getElementById('info').style.display = mode === 'hexagons' ? 'block' : 'none';
             if (mode === 'polygons') hidePolygonPopup();
             if (mode !== 'polygons') hidePolygonPopup();
+            if (mode === 'hexagons' && deckgl) {
+                deckgl.setProps({ initialViewState: { ...INITIAL_VIEW_STATE, transitionDuration: 800 } });
+            }
             if (mode === 'raster' && deckgl && !hasFocusedRasterView) {
                 currentZoom = DEVON_RASTER_VIEW_STATE.zoom;
                 deckgl.setProps({ initialViewState: DEVON_RASTER_VIEW_STATE });
