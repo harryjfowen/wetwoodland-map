@@ -394,7 +394,7 @@
             rgb(20, 67, 108),
             rgb(9, 35, 69)
         )`;
-        const FINE_COG_URL = './wetwoodland_extent_b2.cog.bin?v=20260326-avg-overviews';
+        const FINE_COG_URL = './wetwoodland_extent_b2.cog.bin?v=20260326-bbox-debug';
         const COARSE_COG_URL = './wetwoodland_extent_b2_1km.cog.bin?v=20260325-extent-zero-fix';
         const RASTER_BLEND_START_ZOOM = 7.9;
         const RASTER_BLEND_END_ZOOM = 8.95;
@@ -606,92 +606,83 @@
             url,
             lut,
             useOverviews = true,
-            resampleMethod = 'nearest',
+            resampleMethod = 'bilinear',
             overviewBiasForViewZoom = () => 1
         }) {
             const { fromUrl } = await getGeoTIFFModule();
             const TILE_SIZE = 256;
-            const tiff = await fromUrl(url);
+            const tiff = await fromUrl(url, { allowFullFile: true });
             const imageCount = await tiff.getImageCount();
+            console.log(`[COG ${id}] imageCount=${imageCount}, url=${url}`);
             const imgCache = new Array(imageCount);
             async function getImg(i) {
                 if (!imgCache[i]) imgCache[i] = await tiff.getImage(i);
                 return imgCache[i];
             }
-            const images  = await Promise.all(Array.from({ length: imageCount }, (_, i) => getImg(i)));
-            const base    = images[0];
+            const images = await Promise.all(Array.from({ length: imageCount }, (_, i) => getImg(i)));
+            const base   = images[0];
             const cogBbox = base.getBoundingBox();
             const spanX   = cogBbox[2] - cogBbox[0];
-            const spanY   = cogBbox[3] - cogBbox[1];
-            const ovMeta  = images.map((img, i) => ({ i, res: spanX / img.getWidth(), w: img.getWidth(), h: img.getHeight() }));
+            console.log(`[COG ${id}] cogBbox=${JSON.stringify(cogBbox)} imageCount=${imageCount}`);
+            const ovMeta = images.map((img, i) => ({ i, res: spanX / img.getWidth(), w: img.getWidth(), h: img.getHeight() }));
             ovMeta.sort((a, b) => a.res - b.res);
+            console.log(`[COG ${id}] overviews (finest→coarsest):`, ovMeta.map(m => `${m.w}x${m.h}@${m.res.toFixed(0)}m`));
             function pickOv(targetRes) {
                 let pick = ovMeta[0];
-                for (const m of ovMeta) { if (m.res <= 2*targetRes) pick=m; else break; }
+                for (const m of ovMeta) { if (m.res <= 2 * targetRes) pick = m; else break; }
                 return pick;
             }
             async function getTileData({ bbox, index }) {
-                const west=_lonToM(bbox.west), east=_lonToM(bbox.east);
-                const north=_latToM(bbox.north), south=_latToM(bbox.south);
+                const west  = _lonToM(bbox.west),  east  = _lonToM(bbox.east);
+                const south = _latToM(bbox.south), north = _latToM(bbox.north);
                 if (east<=cogBbox[0]||west>=cogBbox[2]||north<=cogBbox[1]||south>=cogBbox[3]) return null;
-                const overlapWest = Math.max(west, cogBbox[0]);
-                const overlapEast = Math.min(east, cogBbox[2]);
-                const overlapNorth = Math.min(north, cogBbox[3]);
-                const overlapSouth = Math.max(south, cogBbox[1]);
-                if (overlapEast<=overlapWest || overlapNorth<=overlapSouth) return null;
-                const tileZoom = index?.z ?? 0;
-                const overviewBias = overviewBiasForViewZoom(currentZoom, tileZoom);
-                const meta = useOverviews ? pickOv(((east-west)/TILE_SIZE) * overviewBias) : ovMeta[0];
+                const overviewBias = overviewBiasForViewZoom(currentZoom);
+                const meta = useOverviews ? pickOv(((east - west) / TILE_SIZE) * overviewBias) : ovMeta[0];
                 const img  = await getImg(meta.i);
-                const resX = spanX/meta.w, resY = spanY/meta.h;
-                const wx0=Math.max(0,     Math.floor((overlapWest -cogBbox[0])/resX));
-                const wx1=Math.min(meta.w,Math.ceil ((overlapEast -cogBbox[0])/resX));
-                const wy0=Math.max(0,     Math.floor((cogBbox[3]-overlapNorth)/resY));
-                const wy1=Math.min(meta.h,Math.ceil ((cogBbox[3]-overlapSouth)/resY));
-                if (wx1<=wx0||wy1<=wy0) return null;
-                const tileSpanX = east - west;
-                const tileSpanY = north - south;
-                const dx0 = Math.max(0, Math.floor(((overlapWest - west) / tileSpanX) * TILE_SIZE));
-                const dx1 = Math.min(TILE_SIZE, Math.ceil(((overlapEast - west) / tileSpanX) * TILE_SIZE));
-                const dy0 = Math.max(0, Math.floor(((north - overlapNorth) / tileSpanY) * TILE_SIZE));
-                const dy1 = Math.min(TILE_SIZE, Math.ceil(((north - overlapSouth) / tileSpanY) * TILE_SIZE));
-                const outW = dx1 - dx0;
-                const outH = dy1 - dy0;
-                if (outW<=0 || outH<=0) return null;
                 let rasters;
-                try { rasters = await img.readRasters({window:[wx0,wy0,wx1,wy1],width:outW,height:outH,resampleMethod}); }
-                catch { return null; }
-                const band = rasters[0];
-                const rgba = new Uint8ClampedArray(TILE_SIZE*TILE_SIZE*4);
-                for (let y = 0; y < outH; y++) {
-                    for (let x = 0; x < outW; x++) {
-                        const i = y * outW + x;
-                        const v = band[i];
-                        if (v>=255) continue;
-                        const dst = ((dy0 + y) * TILE_SIZE + (dx0 + x)) * 4;
-                        const idx = Math.min(255,Math.round(v*255/254))*4;
-                        rgba[dst]=lut[idx];
-                        rgba[dst+1]=lut[idx+1];
-                        rgba[dst+2]=lut[idx+2];
-                        rgba[dst+3]=lut[idx+3];
-                    }
+                try {
+                    rasters = await img.readRasters({
+                        bbox: [west, south, east, north],
+                        width: TILE_SIZE,
+                        height: TILE_SIZE,
+                        resampleMethod,
+                        interleave: true
+                    });
+                } catch(e) {
+                    console.warn(`[COG ${id}] readRasters failed z=${index?.z}:`, e);
+                    return null;
                 }
+                const band = rasters[0];
+                if (!band) { console.warn(`[COG ${id}] no band data`); return null; }
+                const rgba = new Uint8ClampedArray(TILE_SIZE * TILE_SIZE * 4);
+                let nonZero = 0;
+                for (let i = 0; i < band.length; i++) {
+                    const v = band[i];
+                    if (v >= 255) continue;
+                    const idx = Math.min(255, Math.round(v * 255 / 254)) * 4;
+                    rgba[i*4]   = lut[idx];
+                    rgba[i*4+1] = lut[idx+1];
+                    rgba[i*4+2] = lut[idx+2];
+                    rgba[i*4+3] = lut[idx+3];
+                    if (lut[idx+3] > 0) nonZero++;
+                }
+                if (index?.z <= 6) console.log(`[COG ${id}] tile z=${index?.z} ov=${meta.w}x${meta.h} visiblePx=${nonZero}`);
                 const canvas = document.createElement('canvas');
                 canvas.width = canvas.height = TILE_SIZE;
-                canvas.getContext('2d').putImageData(new ImageData(rgba,TILE_SIZE,TILE_SIZE),0,0);
+                canvas.getContext('2d').putImageData(new ImageData(rgba, TILE_SIZE, TILE_SIZE), 0, 0);
                 return canvas;
             }
             return new deck.TileLayer({
                 id,
                 getTileData,
                 tileSize: TILE_SIZE,
-                maxRequests: 10,
-                minZoom: 4,
-                maxZoom: 16,
+                maxRequests: 6,
+                minZoom: 0,
+                maxZoom: 14,
                 renderSubLayers(props) {
                     if (!props.data) return null;
-                    const {west,south,east,north} = props.tile.bbox;
-                    return new deck.BitmapLayer({...props, data:null, image:props.data, bounds:[west,south,east,north]});
+                    const { west, south, east, north } = props.tile.bbox;
+                    return new deck.BitmapLayer({ ...props, data: null, image: props.data, bounds: [west, south, east, north] });
                 }
             });
         }
