@@ -51,12 +51,10 @@ TARGETS = {
         "src": "data/wet_woodland_mosaic_hysteresis.tif",
         "band": 2,
         "out": "docs/wetwoodland_extent_b2.cog.bin",
-        "resolution": 20,
+        "resolution": 10,
         "resampling": Resampling.nearest,
-        "driver": "COG",
-        "compress": "ZSTD",
-        "level": 18,
-        "overview_compress": "ZSTD",
+        "compress": "DEFLATE",
+        "level": 9,
     },
     "extent_coarse": {
         "src": "data/wet_woodland_mosaic_hysteresis.tif",
@@ -193,11 +191,24 @@ def apply_valid_fraction_mask(
         dst.write(data, 1)
 
 
-def add_overviews(path: Path) -> None:
-    """Build internal overviews with nearest sampling to preserve nodata edges."""
-    with rasterio.open(path, "r+") as ds:
-        ds.build_overviews(OVERVIEW_FACTORS, Resampling.nearest)
-        ds.update_tags(ns="rio_overview", resampling="nearest")
+def add_overviews(path: Path, compress: str = "DEFLATE") -> None:
+    """Build internal overviews with nearest sampling and proper compression."""
+    import subprocess, shutil
+    gdal_addo = shutil.which("gdaladdo")
+    if gdal_addo:
+        cmd = [
+            gdal_addo, "-r", "nearest",
+            "--config", "GDAL_TIFF_OVR_BLOCKSIZE", str(TILE_SIZE),
+            "--config", "COMPRESS_OVERVIEW", compress,
+            "--config", "PREDICTOR_OVERVIEW", "2",
+            "--config", "ZLEVEL_OVERVIEW", "9",
+            str(path),
+        ] + [str(f) for f in OVERVIEW_FACTORS]
+        subprocess.run(cmd, check=True)
+    else:
+        with rasterio.open(path, "r+") as ds:
+            ds.build_overviews(OVERVIEW_FACTORS, Resampling.nearest)
+            ds.update_tags(ns="rio_overview", resampling="nearest")
 
 
 def write_cog(src_path: Path, dst_path: Path) -> None:
@@ -281,11 +292,11 @@ def build(name: str, overwrite: bool = False) -> None:
                     ]
                 )
             else:
+                overview_compress = cfg.get("overview_compress", compress)
                 translate_cmd.extend(
                     [
                         "-co", f"COMPRESS={compress}",
-                        "-co", f"LEVEL={cfg.get('level', 9)}",
-                        "-co", f"OVERVIEW_COMPRESS={cfg.get('overview_compress', compress)}",
+                        "-co", f"OVERVIEW_COMPRESS={overview_compress}",
                         "-co", "RESAMPLING=NEAREST",
                         "-co", "OVERVIEW_RESAMPLING=NEAREST",
                         "-co", "NUM_THREADS=ALL_CPUS",
