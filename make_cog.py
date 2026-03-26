@@ -197,7 +197,7 @@ def add_overviews(path: Path, compress: str = "DEFLATE") -> None:
     gdal_addo = shutil.which("gdaladdo")
     if gdal_addo:
         cmd = [
-            gdal_addo, "-r", "nearest",
+            gdal_addo, "-r", "average",
             "--config", "GDAL_TIFF_OVR_BLOCKSIZE", str(TILE_SIZE),
             "--config", "COMPRESS_OVERVIEW", compress,
             "--config", "PREDICTOR_OVERVIEW", "2",
