@@ -309,23 +309,23 @@
         <p style="margin-bottom: 12px; font-size: 12px;">Coarse 5km hexagon density view across England</p>
 
         <p style="margin: 8px 0 4px 0; font-weight: 600; font-size: 13px;">Coverage Statistics</p>
-        <p style="margin: 3px 0; font-size: 12px;"><strong>Total area:</strong> <span id="summary-total-area">—</span></p>
-        <p style="margin: 3px 0; font-size: 12px;"><strong>Wet woodland:</strong> <span id="summary-wet-pct">—</span></p>
-        <p style="margin: 3px 0; font-size: 12px;"><strong>On peat:</strong> <span id="summary-on-peat">—</span></p>
-        <p style="margin: 3px 0; font-size: 12px;"><strong>Off peat:</strong> <span id="summary-off-peat">—</span></p>
+        <p style="margin: 3px 0; font-size: 12px;"><strong>Total area:</strong> 225,335 ha (2,253 km²)</p>
+        <p style="margin: 3px 0; font-size: 12px;"><strong>Wet woodland:</strong> 8.13% of total forest cover</p>
+        <p style="margin: 3px 0; font-size: 12px;"><strong>On peat:</strong> 11,268 ha (5.0%)</p>
+        <p style="margin: 3px 0; font-size: 12px;"><strong>Off peat:</strong> 214,067 ha (95.0%)</p>
 
         <p style="margin: 8px 0 4px 0; font-weight: 600; font-size: 13px;">Patch Distribution</p>
-        <p style="margin: 3px 0; font-size: 12px;"><strong>≤ 0.01 ha:</strong> <span id="summary-patch-leq-001">—</span></p>
-        <p style="margin: 3px 0; font-size: 12px;"><strong>0.01-0.1 ha:</strong> <span id="summary-patch-001-01">—</span></p>
-        <p style="margin: 3px 0; font-size: 12px;"><strong>0.1-1 ha:</strong> <span id="summary-patch-01-1">—</span></p>
-        <p style="margin: 3px 0; font-size: 12px;"><strong>1-5 ha:</strong> <span id="summary-patch-1-5">—</span></p>
-        <p style="margin: 3px 0; font-size: 12px;"><strong>5-10 ha:</strong> <span id="summary-patch-5-10">—</span></p>
-        <p style="margin: 3px 0; font-size: 12px;"><strong>≥ 10 ha:</strong> <span id="summary-patch-gte-10">—</span></p>
-        <p style="margin: 3px 0; font-size: 12px;"><strong>Patches:</strong> <span id="summary-patch-overall">—</span></p>
+        <p style="margin: 3px 0; font-size: 12px;"><strong>≤ 0.01 ha:</strong> 0.1% — 222 ha</p>
+        <p style="margin: 3px 0; font-size: 12px;"><strong>0.01-0.1 ha:</strong> 4.0% — 8,915 ha</p>
+        <p style="margin: 3px 0; font-size: 12px;"><strong>0.1-1 ha:</strong> 31.9% — 71,852 ha</p>
+        <p style="margin: 3px 0; font-size: 12px;"><strong>1-5 ha:</strong> 37.5% — 84,491 ha</p>
+        <p style="margin: 3px 0; font-size: 12px;"><strong>5-10 ha:</strong> 13.6% — 30,587 ha</p>
+        <p style="margin: 3px 0; font-size: 12px;"><strong>≥ 10 ha:</strong> 13.0% — 29,269 ha</p>
+        <p style="margin: 3px 0; font-size: 12px;"><strong>Patches:</strong> 451,941 | <strong>Median:</strong> 0.14 ha | <strong>Mean:</strong> 0.50 ha</p>
 
         <p style="margin: 8px 0 4px 0; font-weight: 600; font-size: 13px;">Fragmentation</p>
-        <p style="margin: 3px 0; font-size: 12px;"><strong>Effective Mesh Size:</strong> <span id="summary-mesh">—</span></p>
-        <p style="margin: 3px 0; font-size: 12px;"><strong>Mean NN distance:</strong> <span id="summary-mean-nn">—</span></p>
+        <p style="margin: 3px 0; font-size: 12px;"><strong>Effective Mesh Size:</strong> 1.42 ha (0.01 km²)</p>
+        <p style="margin: 3px 0; font-size: 12px;"><strong>Mean NN distance:</strong> 136.4 m</p>
     </div>
     <div id="legend">
         <h3 id="legend-title">Wet Woodland Density</h3>
@@ -394,8 +394,8 @@
             rgb(20, 67, 108),
             rgb(9, 35, 69)
         )`;
-        const FINE_COG_URL = './wetwoodland_extent_b2.cog.bin?v=20260326-bbox-debug';
-        const COARSE_COG_URL = './wetwoodland_extent_b2_1km.cog.bin?v=20260325-extent-zero-fix';
+        const FINE_COG_URL = './wetwoodland_probability.cog.bin?v=20260324-zoomblend';
+        const COARSE_COG_URL = './wetwoodland_probability_1km.cog.bin?v=20260324-zoomblend-mask1';
         const RASTER_BLEND_START_ZOOM = 7.9;
         const RASTER_BLEND_END_ZOOM = 8.95;
 
@@ -407,7 +407,6 @@
         let viewMode = 'hexagons';  // 'hexagons' | 'polygons' | 'potential' | 'raster'
         let hexagonData = null;
         let polygonData = null;
-        let polygonLoadingPromise = null;
         let potentialPoints = null;  // [lon, lat, value] or [lon, lat, value, landClass] for HeatmapLayer
         let potentialLandValueClass = 0;  // 0=1-2, 1=3, 2=4-5 (only used when points have 4 elements)
         let polygonMinDensity = 0;
@@ -423,7 +422,7 @@
         let currentZoom = INITIAL_VIEW_STATE.zoom;
         let geotiffModulePromise = null;
 
-        const AREA_COLOR_RANGE = [[1,152,189],[73,227,206],[216,254,181],[254,237,177],[254,173,84],[209,55,78]];
+        const AREA_COLOR_RANGE = [[0,0,4],[40,11,84],[101,21,110],[159,42,99],[212,72,66],[245,125,21],[252,253,191]];
         const HEX_COLOR_RANGE = [[236,245,232],[204,227,205],[150,199,186],[92,160,168],[46,112,141],[20,67,108],[9,35,69]];
         const POTENTIAL_COLOR_RANGE = [[48,18,59],[50,85,222],[35,171,216],[39,214,129],[171,236,52],[250,193,39],[245,94,24],[144,12,0]];
 
@@ -500,100 +499,6 @@
             return startBias - (startBias - 1) * eased;
         }
 
-        function formatHa(ha, decimals = 0) {
-            return `${Number(ha).toLocaleString(undefined, {
-                minimumFractionDigits: decimals,
-                maximumFractionDigits: decimals
-            })} ha`;
-        }
-
-        function formatPct(pct, decimals = 1) {
-            return `${Number(pct).toLocaleString(undefined, {
-                minimumFractionDigits: decimals,
-                maximumFractionDigits: decimals
-            })}%`;
-        }
-
-        async function loadNationalSummary() {
-            try {
-                const response = await fetch('wetwoodland_summary.json?v=20260324-report-refresh');
-                if (!response.ok) throw new Error(`HTTP ${response.status}`);
-                const summary = await response.json();
-                const coverage = summary.coverage || {};
-                const patchSummary = summary.patch_summary || {};
-                const fragmentation = summary.fragmentation || {};
-                const patchByLabel = Object.fromEntries((summary.patch_distribution || []).map(row => [row.label, row]));
-
-                document.getElementById('summary-total-area').textContent =
-                    `${formatHa(coverage.total_area_ha, 0)} (${Number(coverage.total_area_km2).toLocaleString(undefined, { maximumFractionDigits: 1, minimumFractionDigits: 1 })} km²)`;
-                document.getElementById('summary-wet-pct').textContent =
-                    `${formatPct(coverage.wet_pct_of_forest, 2)} of total forest cover`;
-                document.getElementById('summary-on-peat').textContent =
-                    `${formatHa(coverage.on_peat_ha, 0)} (${formatPct(coverage.on_peat_pct, 1)})`;
-                document.getElementById('summary-off-peat').textContent =
-                    `${formatHa(coverage.off_peat_ha, 0)} (${formatPct(coverage.off_peat_pct, 1)})`;
-
-                const patchTargets = [
-                    ['≤ 0.01 ha', 'summary-patch-leq-001'],
-                    ['0.01-0.1 ha', 'summary-patch-001-01'],
-                    ['0.1-1 ha', 'summary-patch-01-1'],
-                    ['1-5 ha', 'summary-patch-1-5'],
-                    ['5-10 ha', 'summary-patch-5-10'],
-                    ['≥ 10 ha', 'summary-patch-gte-10']
-                ];
-                patchTargets.forEach(([label, id]) => {
-                    const row = patchByLabel[label];
-                    if (!row) return;
-                    document.getElementById(id).textContent =
-                        `${formatPct(row.pct, 1)} — ${formatHa(row.area_ha, 0)}`;
-                });
-
-                document.getElementById('summary-patch-overall').textContent =
-                    `${Number(patchSummary.total_patches).toLocaleString()} | Median: ${Number(patchSummary.median_patch_ha).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ha | Mean: ${Number(patchSummary.mean_patch_ha).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ha`;
-                document.getElementById('summary-mesh').textContent =
-                    `${Number(fragmentation.effective_mesh_size_ha).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ha (${Number(fragmentation.effective_mesh_size_km2).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} km²)`;
-                document.getElementById('summary-mean-nn').textContent =
-                    `${Number(fragmentation.mean_nn_m).toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })} m`;
-            } catch (error) {
-                console.warn('Failed to load national summary stats.', error);
-            }
-        }
-
-        async function loadPolygonData() {
-            if (polygonData) return polygonData;
-            if (!polygonLoadingPromise) {
-                polygonLoadingPromise = fetch('wet_woodland_lnrs_regions.geojson?v=20260325-web')
-                    .then(response => {
-                        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-                        return response.json();
-                    })
-                    .then(geo => {
-                        polygonData = geo;
-                        const densities = geo.features.map(f => f.properties.total_area_ha ?? 0);
-                        polygonMinDensity = densities.length ? Math.min(...densities) : 0;
-                        polygonMaxDensity = densities.length ? Math.max(...densities) : 1;
-                        if (polygonMaxDensity === polygonMinDensity) polygonMaxDensity = polygonMinDensity + 1;
-                        return geo;
-                    })
-                    .catch(error => {
-                        polygonLoadingPromise = null;
-                        throw error;
-                    });
-            }
-            return polygonLoadingPromise;
-        }
-
-        function schedulePolygonPrewarm() {
-            const kick = () => loadPolygonData().catch((error) => {
-                console.warn('Background LNRS preload failed.', error);
-            });
-            if (typeof window.requestIdleCallback === 'function') {
-                window.requestIdleCallback(kick, { timeout: 3000 });
-                return;
-            }
-            window.setTimeout(kick, 1500);
-        }
-
         async function getGeoTIFFModule() {
             if (!geotiffModulePromise) {
                 geotiffModulePromise = import('https://esm.sh/geotiff@2.1.3');
@@ -606,94 +511,97 @@
             url,
             lut,
             useOverviews = true,
-            resampleMethod = 'bilinear',
+            resampleMethod = 'nearest',
             overviewBiasForViewZoom = () => 1
         }) {
             const { fromUrl } = await getGeoTIFFModule();
             const TILE_SIZE = 256;
-            const tiff = await fromUrl(url, { allowFullFile: true });
+            const tiff = await fromUrl(url);
             const imageCount = await tiff.getImageCount();
-            console.log(`[COG ${id}] imageCount=${imageCount}, url=${url}`);
             const imgCache = new Array(imageCount);
             async function getImg(i) {
                 if (!imgCache[i]) imgCache[i] = await tiff.getImage(i);
                 return imgCache[i];
             }
-            const images = await Promise.all(Array.from({ length: imageCount }, (_, i) => getImg(i)));
-            const base   = images[0];
+            const images  = await Promise.all(Array.from({ length: imageCount }, (_, i) => getImg(i)));
+            const base    = images[0];
             const cogBbox = base.getBoundingBox();
             const spanX   = cogBbox[2] - cogBbox[0];
-            console.log(`[COG ${id}] cogBbox=${JSON.stringify(cogBbox)} imageCount=${imageCount}`);
-            const ovMeta = images.map((img, i) => ({ i, res: spanX / img.getWidth(), w: img.getWidth(), h: img.getHeight() }));
+            const spanY   = cogBbox[3] - cogBbox[1];
+            const ovMeta  = images.map((img, i) => ({ i, res: spanX / img.getWidth(), w: img.getWidth(), h: img.getHeight() }));
             ovMeta.sort((a, b) => a.res - b.res);
-            console.log(`[COG ${id}] overviews (finest→coarsest):`, ovMeta.map(m => `${m.w}x${m.h}@${m.res.toFixed(0)}m`));
             function pickOv(targetRes) {
                 let pick = ovMeta[0];
-                for (const m of ovMeta) { if (m.res <= 2 * targetRes) pick = m; else break; }
+                for (const m of ovMeta) { if (m.res <= 2*targetRes) pick=m; else break; }
                 return pick;
             }
             async function getTileData({ bbox, index }) {
-                const west  = _lonToM(bbox.west),  east  = _lonToM(bbox.east);
-                const south = _latToM(bbox.south), north = _latToM(bbox.north);
+                const west=_lonToM(bbox.west), east=_lonToM(bbox.east);
+                const north=_latToM(bbox.north), south=_latToM(bbox.south);
                 if (east<=cogBbox[0]||west>=cogBbox[2]||north<=cogBbox[1]||south>=cogBbox[3]) return null;
-                const overviewBias = overviewBiasForViewZoom(currentZoom);
-                const meta = useOverviews ? pickOv(((east - west) / TILE_SIZE) * overviewBias) : ovMeta[0];
+                const overlapWest = Math.max(west, cogBbox[0]);
+                const overlapEast = Math.min(east, cogBbox[2]);
+                const overlapNorth = Math.min(north, cogBbox[3]);
+                const overlapSouth = Math.max(south, cogBbox[1]);
+                if (overlapEast<=overlapWest || overlapNorth<=overlapSouth) return null;
+                const tileZoom = index?.z ?? 0;
+                const overviewBias = overviewBiasForViewZoom(currentZoom, tileZoom);
+                const meta = useOverviews ? pickOv(((east-west)/TILE_SIZE) * overviewBias) : ovMeta[0];
                 const img  = await getImg(meta.i);
+                const resX = spanX/meta.w, resY = spanY/meta.h;
+                const wx0=Math.max(0,     Math.floor((overlapWest -cogBbox[0])/resX));
+                const wx1=Math.min(meta.w,Math.ceil ((overlapEast -cogBbox[0])/resX));
+                const wy0=Math.max(0,     Math.floor((cogBbox[3]-overlapNorth)/resY));
+                const wy1=Math.min(meta.h,Math.ceil ((cogBbox[3]-overlapSouth)/resY));
+                if (wx1<=wx0||wy1<=wy0) return null;
+                const tileSpanX = east - west;
+                const tileSpanY = north - south;
+                const dx0 = Math.max(0, Math.floor(((overlapWest - west) / tileSpanX) * TILE_SIZE));
+                const dx1 = Math.min(TILE_SIZE, Math.ceil(((overlapEast - west) / tileSpanX) * TILE_SIZE));
+                const dy0 = Math.max(0, Math.floor(((north - overlapNorth) / tileSpanY) * TILE_SIZE));
+                const dy1 = Math.min(TILE_SIZE, Math.ceil(((north - overlapSouth) / tileSpanY) * TILE_SIZE));
+                const outW = dx1 - dx0;
+                const outH = dy1 - dy0;
+                if (outW<=0 || outH<=0) return null;
                 let rasters;
-                try {
-                    rasters = await img.readRasters({
-                        bbox: [west, south, east, north],
-                        width: TILE_SIZE,
-                        height: TILE_SIZE,
-                        resampleMethod
-                    });
-                } catch(e) {
-                    console.warn(`[COG ${id}] readRasters failed z=${index?.z}:`, e);
-                    return null;
-                }
+                try { rasters = await img.readRasters({window:[wx0,wy0,wx1,wy1],width:outW,height:outH,resampleMethod}); }
+                catch { return null; }
                 const band = rasters[0];
-                if (!band) { console.warn(`[COG ${id}] no band data`); return null; }
-                const rgba = new Uint8ClampedArray(TILE_SIZE * TILE_SIZE * 4);
-                let nonZero = 0;
-                for (let i = 0; i < band.length; i++) {
-                    const v = band[i];
-                    if (v >= 255) continue;
-                    const idx = Math.min(255, Math.round(v * 255 / 254)) * 4;
-                    rgba[i*4]   = lut[idx];
-                    rgba[i*4+1] = lut[idx+1];
-                    rgba[i*4+2] = lut[idx+2];
-                    rgba[i*4+3] = lut[idx+3];
-                    if (lut[idx+3] > 0) nonZero++;
+                const rgba = new Uint8ClampedArray(TILE_SIZE*TILE_SIZE*4);
+                for (let y = 0; y < outH; y++) {
+                    for (let x = 0; x < outW; x++) {
+                        const i = y * outW + x;
+                        const v = band[i];
+                        if (v>=255) continue;
+                        const dst = ((dy0 + y) * TILE_SIZE + (dx0 + x)) * 4;
+                        const idx = Math.min(255,Math.round(v*255/254))*4;
+                        rgba[dst]=lut[idx];
+                        rgba[dst+1]=lut[idx+1];
+                        rgba[dst+2]=lut[idx+2];
+                        rgba[dst+3]=lut[idx+3];
+                    }
                 }
-                if (index?.z <= 6) console.log(`[COG ${id}] tile z=${index?.z} ov=${meta.w}x${meta.h} visiblePx=${nonZero}`);
                 const canvas = document.createElement('canvas');
                 canvas.width = canvas.height = TILE_SIZE;
-                canvas.getContext('2d').putImageData(new ImageData(rgba, TILE_SIZE, TILE_SIZE), 0, 0);
+                canvas.getContext('2d').putImageData(new ImageData(rgba,TILE_SIZE,TILE_SIZE),0,0);
                 return canvas;
             }
             return new deck.TileLayer({
                 id,
                 getTileData,
                 tileSize: TILE_SIZE,
-                maxRequests: 6,
-                minZoom: 0,
-                maxZoom: 14,
+                maxRequests: 10,
+                minZoom: 4,
+                maxZoom: 16,
                 renderSubLayers(props) {
                     if (!props.data) return null;
-                    const { west, south, east, north } = props.tile.bbox;
-                    return new deck.BitmapLayer({ ...props, data: null, image: props.data, bounds: [west, south, east, north] });
+                    const {west,south,east,north} = props.tile.bbox;
+                    return new deck.BitmapLayer({...props, data:null, image:props.data, bounds:[west,south,east,north]});
                 }
             });
         }
 
-        async function buildStaticCogBitmapLayer({
-            id,
-            url,
-            lut,
-            valueFloor = 0,
-            valueCeil = 1,
-            valueGamma = 1
-        }) {
+        async function buildStaticCogBitmapLayer({ id, url, lut, valueFloor = 0, valueCeil = 1, valueGamma = 1 }) {
             const { fromUrl } = await getGeoTIFFModule();
             const tiff = await fromUrl(url);
             const img = await tiff.getImage(0);
@@ -736,15 +644,34 @@
             if (cogReady) return;
             if (!cogLoadingPromise) {
                 cogLoadingPromise = (async () => {
-                    fineCogLayer = await buildCogTileLayer({
-                        id: 'probability-cog-fine',
-                        url: FINE_COG_URL,
-                        lut: PLASMA_LUT,
-                        useOverviews: true,
-                        resampleMethod: 'nearest',
-                        overviewBiasForViewZoom: (zoom) => getFineRasterOverviewBias(zoom)
-                    });
-                    coarseRasterLayer = null;
+                    const [fineResult, coarseResult] = await Promise.allSettled([
+                        buildCogTileLayer({
+                            id: 'probability-cog-fine',
+                            url: FINE_COG_URL,
+                            lut: PLASMA_LUT,
+                            useOverviews: true,
+                            resampleMethod: 'nearest',
+                            overviewBiasForViewZoom: (zoom) => getFineRasterOverviewBias(zoom)
+                        }),
+                        buildStaticCogBitmapLayer({
+                            id: 'probability-cog-coarse',
+                            url: COARSE_COG_URL,
+                            lut: COARSE_PLASMA_LUT,
+                            valueFloor: 0.04,
+                            valueCeil: 0.5,
+                            valueGamma: 1.05
+                        })
+                    ]);
+                    if (fineResult.status !== 'fulfilled') {
+                        throw fineResult.reason;
+                    }
+                    fineCogLayer = fineResult.value;
+                    if (coarseResult.status === 'fulfilled') {
+                        coarseRasterLayer = coarseResult.value;
+                    } else {
+                        console.warn('Low-zoom coarse raster unavailable, using fine raster only.', coarseResult.reason);
+                        coarseRasterLayer = null;
+                    }
                     cogReady = true;
                 })().catch((error) => {
                     cogLoadingPromise = null;
@@ -772,44 +699,65 @@
         // Format polygon popup: selected stats only, bold label on left like density info pane
         function formatPolygonPopup(props) {
             const fmt = (v) => v == null || v === '' ? null : (typeof v === 'number' ? (Number.isInteger(v) ? v.toLocaleString() : v.toFixed(2)) : String(v));
-            const pctFmt = (v, decimals = 1) => v != null && v !== '' ? (typeof v === 'number' ? v.toFixed(decimals) : String(v)) : null;
+            const pctFmt = (v) => v != null && v !== '' ? (typeof v === 'number' ? v.toFixed(1) : String(v)) : null;
             const rows = [];
             const ha = props.total_area_ha;
             const regionHa = props.region_area_ha;
-            const wetPropPct = props.wet_prop_pct != null ? pctFmt(props.wet_prop_pct, 2) + '%' : (
-                ha != null && regionHa != null && regionHa > 0 ? ((ha / regionHa) * 100).toFixed(2) + '%' : null
-            );
+            const pctOfRegion = (ha != null && regionHa != null && regionHa > 0) ? ((ha / regionHa) * 100).toFixed(2) + '%' : null;
             if (fmt(props.LNRS_ID)) rows.push({ key: 'LNRS ID', val: fmt(props.LNRS_ID) });
             if (fmt(props.Resp_Auth)) rows.push({ key: 'Responsible Authority', val: fmt(props.Resp_Auth) });
             if (fmt(ha)) rows.push({ key: 'Total wet woodland (ha)', val: fmt(ha) });
-            if (fmt(regionHa)) rows.push({ key: 'Reference area (ha)', val: fmt(regionHa) });
-            if (wetPropPct) rows.push({ key: 'Wet woodland % of region', val: wetPropPct });
-
+            if (pctOfRegion) rows.push({ key: 'Wet woodland % of region', val: pctOfRegion });
+            if (fmt(props.forest_cover_pct)) rows.push({ key: 'Forest cover %', val: fmt(props.forest_cover_pct) });
+            if (fmt(props.on_peat_pct)) rows.push({ key: 'On peat %', val: fmt(props.on_peat_pct) });
+            if (fmt(props.effective_mesh_size_ha)) rows.push({ key: 'Effective mesh size (ha)', val: fmt(props.effective_mesh_size_ha) });
+            if (fmt(props.mean_nn_m)) rows.push({ key: 'Mean NN distance (m)', val: fmt(props.mean_nn_m) });
+            if (fmt(props.num_patches)) rows.push({ key: 'Number of patches', val: fmt(props.num_patches) });
+            // Patch distribution (same bands as national; omit ≤ 0.01 ha so LNRS matches national 0 ha)
+            const bands = [
+                { key: '0.01-0.1 ha', pct: props.pct_0_01_0_1, area: props.area_0_01_0_1_ha },
+                { key: '0.1-1 ha', pct: props.pct_0_1_1, area: props.area_0_1_1_ha },
+                { key: '1-5 ha', pct: props.pct_1_5, area: props.area_1_5_ha },
+                { key: '5-10 ha', pct: props.pct_5_10, area: props.area_5_10_ha },
+                { key: '≥ 10 ha', pct: props.pct_gte_10, area: props.area_gte_10_ha }
+            ];
+            const hasPatchData = bands.some(b => (b.pct != null && b.pct !== '') || (b.area != null && b.area !== ''));
+            if (hasPatchData) {
+                rows.push({ divider: true });
+                rows.push({ section: 'Patch Distribution' });
+                bands.forEach(b => {
+                    const pct = pctFmt(b.pct);
+                    const areaHa = fmt(b.area);
+                    const val = [pct ? pct + '%' : null, areaHa ? areaHa + ' ha' : null].filter(Boolean).join(' — ');
+                    if (val) rows.push({ key: b.key + ':', val });
+                });
+                const med = fmt(props.median_patch_ha);
+                const large = fmt(props.largest_patch_ha);
+                if (med || large) rows.push({ key: 'Median | Largest', val: [med ? med + ' ha' : '', large ? large + ' ha' : ''].filter(Boolean).join(' | ') });
+            } else {
+                if (fmt(props.largest_patch_ha)) rows.push({ key: 'Largest patch (ha)', val: fmt(props.largest_patch_ha) });
+                if (fmt(props.median_patch_ha)) rows.push({ key: 'Median patch (ha)', val: fmt(props.median_patch_ha) });
+            }
+            // Suitability for restoration — prefer grade split, else show report-based total
+            const s12 = props.suitable_ha_grade_12, s3 = props.suitable_ha_grade_3, s45 = props.suitable_ha_grade_45;
             const sTotal = props.suitable_area_ha;
             const sOnPeat = props.suitable_on_peat_area_ha;
             const sOffPeat = props.suitable_off_peat_area_ha;
-            const sUnderForest = props.suitable_under_forest_area_ha;
-            const sBareLand = props.suitable_bare_land_area_ha;
             const sPct = props.suitable_pct_of_valid;
             const sThreshold = props.suitable_threshold;
-            const sMean = props.mean_suitability;
-            const sMedian = props.median_suitability;
-            const sValidArea = props.valid_suitability_area_ha;
-            const within100 = props.within_100m_pct_of_valid;
-            if (sTotal != null) {
+            if (s12 != null || s3 != null || s45 != null || sTotal != null) {
                 rows.push({ divider: true });
                 rows.push({ section: 'Suitability for restoration' });
-                rows.push({ key: 'Total suitable area (ha)', val: fmt(sTotal) });
-                if (fmt(sValidArea) != null) rows.push({ key: 'Valid suitability area (ha)', val: fmt(sValidArea) });
-                if (fmt(sPct) != null) rows.push({ key: 'Suitable % of valid', val: fmt(sPct) + '%' });
-                if (fmt(sOnPeat) != null) rows.push({ key: 'Suitable on peat (ha)', val: fmt(sOnPeat) });
-                if (fmt(sOffPeat) != null) rows.push({ key: 'Suitable off peat (ha)', val: fmt(sOffPeat) });
-                if (fmt(sUnderForest) != null) rows.push({ key: 'Suitable under forest (ha)', val: fmt(sUnderForest) });
-                if (fmt(sBareLand) != null) rows.push({ key: 'Suitable bare land (ha)', val: fmt(sBareLand) });
-                if (fmt(sMean) != null) rows.push({ key: 'Mean suitability', val: fmt(sMean) });
-                if (fmt(sMedian) != null) rows.push({ key: 'Median suitability', val: fmt(sMedian) });
-                if (fmt(within100) != null) rows.push({ key: 'Within 100m of wet woodland', val: fmt(within100) + '%' });
-                if (fmt(sThreshold) != null) rows.push({ key: 'Suitability threshold', val: '≥ ' + fmt(sThreshold) });
+                if (fmt(s12) != null) rows.push({ key: 'Agricultural Grade 1–2 (ha)', val: fmt(s12) });
+                if (fmt(s3) != null) rows.push({ key: 'Agricultural Grade 3 (ha)', val: fmt(s3) });
+                if (fmt(s45) != null) rows.push({ key: 'Agricultural Grade 4–5 (ha)', val: fmt(s45) });
+                if (fmt(sTotal) != null && (s12 == null && s3 == null && s45 == null)) {
+                    rows.push({ key: 'Total suitable area (ha)', val: fmt(sTotal) });
+                    if (fmt(sOnPeat) != null) rows.push({ key: 'Suitable on peat (ha)', val: fmt(sOnPeat) });
+                    if (fmt(sOffPeat) != null) rows.push({ key: 'Suitable off peat (ha)', val: fmt(sOffPeat) });
+                    if (fmt(sPct) != null) rows.push({ key: 'Suitable % of valid', val: fmt(sPct) + '%' });
+                    if (fmt(sThreshold) != null) rows.push({ key: 'Suitability threshold', val: '≥ ' + fmt(sThreshold) });
+                }
             }
             return rows;
         }
@@ -951,8 +899,17 @@
                     colorRange: POTENTIAL_COLOR_RANGE
                 })];
             }
-            if (viewMode === 'raster' && fineCogLayer) {
-                return [fineCogLayer.clone({ opacity: 1 })];
+            if (viewMode === 'raster' && (fineCogLayer || coarseRasterLayer)) {
+                if (!coarseRasterLayer && fineCogLayer) return [fineCogLayer.clone({ opacity: 1 })];
+                const { coarseOpacity, fineOpacity } = getRasterBlend(currentZoom);
+                const layers = [];
+                if (coarseRasterLayer && coarseOpacity > 0.001) {
+                    layers.push(coarseRasterLayer.clone({ opacity: coarseOpacity }));
+                }
+                if (fineCogLayer && fineOpacity > 0.001) {
+                    layers.push(fineCogLayer.clone({ opacity: fineOpacity }));
+                }
+                return layers;
             }
             return [];
         }
@@ -1046,8 +1003,14 @@
                     } else {
                         document.getElementById('loading').style.display = 'block';
                         document.getElementById('loading').textContent = 'Loading LNRS regions...';
-                        loadPolygonData()
-                            .then(() => {
+                        fetch('wet_woodland_lnrs_regions.geojson')
+                            .then(r => r.json())
+                            .then(geo => {
+                                polygonData = geo;
+                                const densities = geo.features.map(f => f.properties.total_area_ha ?? 0);
+                                polygonMinDensity = densities.length ? Math.min(...densities) : 0;
+                                polygonMaxDensity = densities.length ? Math.max(...densities) : 1;
+                                if (polygonMaxDensity === polygonMinDensity) polygonMaxDensity = polygonMinDensity + 1;
                                 document.getElementById('loading').style.display = 'none';
                                 setViewMode('polygons');
                             })
@@ -1109,8 +1072,6 @@
                         document.getElementById('loading').textContent = '❌ Failed to load COG: ' + err.message;
                     }
                 });
-                loadNationalSummary();
-                schedulePolygonPrewarm();
                 scheduleCogPrewarm();
                 const lvNames = ['Grade 1–2', 'Grade 3', 'Grade 4–5'];
                 document.getElementById('lv-12').addEventListener('click', () => {
