@@ -394,7 +394,7 @@
             rgb(20, 67, 108),
             rgb(9, 35, 69)
         )`;
-        const FINE_COG_URL = './wetwoodland_probability.cog.bin?v=20260326-cog-only';
+        const FINE_COG_URL = './wetwoodland_extent_b2.cog.bin?v=20260326-extent-b2';
 
         // Control state
         let heightExponent = 1.5;
@@ -831,7 +831,7 @@
                     stroked: true,
                     filled: true,
                     extruded: false,
-                    getFillColor: f => interpolateColorRange(f.properties.total_area_ha ?? 0, polygonMinDensity, polygonMaxDensity, AREA_COLOR_RANGE, 128),
+                    getFillColor: f => interpolateColorRange(f.properties.total_area_ha ?? 0, polygonMinDensity, polygonMaxDensity, HEX_COLOR_RANGE, 160),
                     getLineColor: [0, 0, 0, 255],
                     lineWidthMinPixels: 1,
                     pickable: true,
@@ -854,7 +854,7 @@
                     intensity: 1,
                     threshold: 0.03,
                     opacity: 1,
-                    colorRange: POTENTIAL_COLOR_RANGE
+                    colorRange: HEX_COLOR_RANGE
                 })];
             }
             if (viewMode === 'raster' && fineCogLayer) {
