@@ -36,8 +36,10 @@ TARGETS = {
         "src": "data/wet_woodland_potential.tif",
         "band": 1,
         "out": "docs/wetwoodland_probability.cog.bin",
-        "resolution": 30,
+        "resolution": 40,
         "resampling": Resampling.nearest,
+        "compress": "ZSTD",
+        "level": 15,
     },
     "probability_coarse": {
         "src": "data/wet_woodland_potential.tif",

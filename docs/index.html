@@ -394,10 +394,7 @@
             rgb(20, 67, 108),
             rgb(9, 35, 69)
         )`;
-        const FINE_COG_URL = './wetwoodland_probability.cog.bin?v=20260324-zoomblend';
-        const COARSE_COG_URL = './wetwoodland_probability_1km.cog.bin?v=20260324-zoomblend-mask1';
-        const RASTER_BLEND_START_ZOOM = 7.9;
-        const RASTER_BLEND_END_ZOOM = 8.95;
+        const FINE_COG_URL = './wetwoodland_probability.cog.bin?v=20260326-cog-only';
 
         // Control state
         let heightExponent = 1.5;
@@ -415,7 +412,6 @@
         let minCount = 0;
         let deckgl = null;
         let fineCogLayer = null;
-        let coarseRasterLayer = null;
         let cogReady = false;
         let cogLoadingPromise = null;
         let hasFocusedRasterView = false;
@@ -481,23 +477,6 @@
         const _mToLon = x => x * 180 / (Math.PI * _R);
         const _mToLat = y => (2 * Math.atan(Math.exp(y / _R)) - Math.PI / 2) * 180 / Math.PI;
 
-        function getRasterBlend(zoom) {
-            if (zoom <= RASTER_BLEND_START_ZOOM) return { coarseOpacity: 1, fineOpacity: 0 };
-            if (zoom >= RASTER_BLEND_END_ZOOM) return { coarseOpacity: 0, fineOpacity: 1 };
-            const t = (zoom - RASTER_BLEND_START_ZOOM) / (RASTER_BLEND_END_ZOOM - RASTER_BLEND_START_ZOOM);
-            const eased = t * t * (3 - 2 * t);
-            return { coarseOpacity: 1 - eased, fineOpacity: eased };
-        }
-
-        function getFineRasterOverviewBias(zoom) {
-            const startBias = 2.15;
-            const settleZoom = RASTER_BLEND_END_ZOOM + 0.7;
-            if (zoom <= RASTER_BLEND_START_ZOOM) return startBias;
-            if (zoom >= settleZoom) return 1;
-            const t = (zoom - RASTER_BLEND_START_ZOOM) / (settleZoom - RASTER_BLEND_START_ZOOM);
-            const eased = t * t * (3 - 2 * t);
-            return startBias - (startBias - 1) * eased;
-        }
 
         async function getGeoTIFFModule() {
             if (!geotiffModulePromise) {
@@ -644,34 +623,13 @@
             if (cogReady) return;
             if (!cogLoadingPromise) {
                 cogLoadingPromise = (async () => {
-                    const [fineResult, coarseResult] = await Promise.allSettled([
-                        buildCogTileLayer({
-                            id: 'probability-cog-fine',
-                            url: FINE_COG_URL,
-                            lut: PLASMA_LUT,
-                            useOverviews: true,
-                            resampleMethod: 'nearest',
-                            overviewBiasForViewZoom: (zoom) => getFineRasterOverviewBias(zoom)
-                        }),
-                        buildStaticCogBitmapLayer({
-                            id: 'probability-cog-coarse',
-                            url: COARSE_COG_URL,
-                            lut: COARSE_PLASMA_LUT,
-                            valueFloor: 0.04,
-                            valueCeil: 0.5,
-                            valueGamma: 1.05
-                        })
-                    ]);
-                    if (fineResult.status !== 'fulfilled') {
-                        throw fineResult.reason;
-                    }
-                    fineCogLayer = fineResult.value;
-                    if (coarseResult.status === 'fulfilled') {
-                        coarseRasterLayer = coarseResult.value;
-                    } else {
-                        console.warn('Low-zoom coarse raster unavailable, using fine raster only.', coarseResult.reason);
-                        coarseRasterLayer = null;
-                    }
+                    fineCogLayer = await buildCogTileLayer({
+                        id: 'probability-cog-fine',
+                        url: FINE_COG_URL,
+                        lut: PLASMA_LUT,
+                        useOverviews: true,
+                        resampleMethod: 'nearest',
+                    });
                     cogReady = true;
                 })().catch((error) => {
                     cogLoadingPromise = null;
@@ -899,17 +857,8 @@
                     colorRange: POTENTIAL_COLOR_RANGE
                 })];
             }
-            if (viewMode === 'raster' && (fineCogLayer || coarseRasterLayer)) {
-                if (!coarseRasterLayer && fineCogLayer) return [fineCogLayer.clone({ opacity: 1 })];
-                const { coarseOpacity, fineOpacity } = getRasterBlend(currentZoom);
-                const layers = [];
-                if (coarseRasterLayer && coarseOpacity > 0.001) {
-                    layers.push(coarseRasterLayer.clone({ opacity: coarseOpacity }));
-                }
-                if (fineCogLayer && fineOpacity > 0.001) {
-                    layers.push(fineCogLayer.clone({ opacity: fineOpacity }));
-                }
-                return layers;
+            if (viewMode === 'raster' && fineCogLayer) {
+                return [fineCogLayer.clone({ opacity: 1 })];
             }
             return [];
         }
