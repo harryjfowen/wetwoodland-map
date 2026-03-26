@@ -861,7 +861,8 @@
                 })];
             }
             if (viewMode === 'raster' && fineCogLayer) {
-                return [fineCogLayer.clone({ opacity: 1 })];
+                const opacity = Math.min(1, Math.max(0.35, (currentZoom - 5) / 2.5));
+                return [fineCogLayer.clone({ opacity })];
             }
             return [];
         }
