@@ -53,11 +53,11 @@ TARGETS = {
         "src": "data/wet_woodland_mosaic_hysteresis.tif",
         "band": 2,
         "out": "docs/wetwoodland_extent_b2.cog.bin",
-        "resolution": 25,
+        "resolution": 30,
         "resampling": Resampling.nearest,
         "compress": "DEFLATE",
         "level": 9,
-        "overview_zero_as_nodata": True,
+        "overview_resampling": "rms",
     },
     "extent_coarse": {
         "src": "data/wet_woodland_mosaic_hysteresis.tif",
