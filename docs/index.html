@@ -859,11 +859,12 @@
                 minCount = counts.reduce((a, b) => Math.min(a, b), Infinity);
                 document.getElementById('loading').style.display = 'none';
 
+                hasFocusedRasterView = true;  // default tab is raster, already at Devon view
                 deckgl = new deck.DeckGL({
                     container: 'map',
                     mapLib: maplibregl,
                     mapStyle: 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json',
-                    initialViewState: INITIAL_VIEW_STATE,
+                    initialViewState: DEVON_RASTER_VIEW_STATE,
                     controller: true,
                     layers: getLayers(),
                     effects: [
