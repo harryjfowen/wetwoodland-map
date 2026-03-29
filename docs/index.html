@@ -858,6 +858,7 @@
                 maxCount = counts.reduce((a, b) => Math.max(a, b), 0);
                 minCount = counts.reduce((a, b) => Math.min(a, b), Infinity);
                 document.getElementById('loading').style.display = 'none';
+                applyLegendStyle('raster');
 
                 deckgl = new deck.DeckGL({
                     container: 'map',
