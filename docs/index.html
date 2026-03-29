@@ -1004,7 +1004,13 @@
                         document.getElementById('loading').textContent = '❌ Failed to load COG: ' + err.message;
                     }
                 });
-                scheduleCogPrewarm();
+                // Raster is the default tab — load COG immediately
+                ensureCogLayer().then(() => {
+                    if (viewMode === 'raster') updateLayers();
+                }).catch(err => {
+                    console.error('COG load failed:', err);
+                    document.getElementById('loading').textContent = '❌ Failed to load extent map: ' + err.message;
+                });
                 const lvNames = ['Grade 1–2', 'Grade 3', 'Grade 4–5'];
                 document.getElementById('lv-12').addEventListener('click', () => {
                     potentialLandValueClass = 0;
