@@ -671,34 +671,9 @@
             if (pctOfRegion) rows.push({ key: 'Wet woodland % of region', val: pctOfRegion });
             if (fmt(props.forest_cover_pct)) rows.push({ key: 'Forest cover %', val: fmt(props.forest_cover_pct) });
             if (fmt(props.on_peat_pct)) rows.push({ key: 'On peat %', val: fmt(props.on_peat_pct) });
-            if (fmt(props.effective_mesh_size_ha)) rows.push({ key: 'Effective mesh size (ha)', val: fmt(props.effective_mesh_size_ha) });
-            if (fmt(props.mean_nn_m)) rows.push({ key: 'Mean NN distance (m)', val: fmt(props.mean_nn_m) });
-            if (fmt(props.num_patches)) rows.push({ key: 'Number of patches', val: fmt(props.num_patches) });
-            // Patch distribution (same bands as national; omit ≤ 0.01 ha so LNRS matches national 0 ha)
-            const bands = [
-                { key: '0.01-0.1 ha', pct: props.pct_0_01_0_1, area: props.area_0_01_0_1_ha },
-                { key: '0.1-1 ha', pct: props.pct_0_1_1, area: props.area_0_1_1_ha },
-                { key: '1-5 ha', pct: props.pct_1_5, area: props.area_1_5_ha },
-                { key: '5-10 ha', pct: props.pct_5_10, area: props.area_5_10_ha },
-                { key: '≥ 10 ha', pct: props.pct_gte_10, area: props.area_gte_10_ha }
-            ];
-            const hasPatchData = bands.some(b => (b.pct != null && b.pct !== '') || (b.area != null && b.area !== ''));
-            if (hasPatchData) {
-                rows.push({ divider: true });
-                rows.push({ section: 'Patch Distribution' });
-                bands.forEach(b => {
-                    const pct = pctFmt(b.pct);
-                    const areaHa = fmt(b.area);
-                    const val = [pct ? pct + '%' : null, areaHa ? areaHa + ' ha' : null].filter(Boolean).join(' — ');
-                    if (val) rows.push({ key: b.key + ':', val });
-                });
-                const med = fmt(props.median_patch_ha);
-                const large = fmt(props.largest_patch_ha);
-                if (med || large) rows.push({ key: 'Median | Largest', val: [med ? med + ' ha' : '', large ? large + ' ha' : ''].filter(Boolean).join(' | ') });
-            } else {
-                if (fmt(props.largest_patch_ha)) rows.push({ key: 'Largest patch (ha)', val: fmt(props.largest_patch_ha) });
-                if (fmt(props.median_patch_ha)) rows.push({ key: 'Median patch (ha)', val: fmt(props.median_patch_ha) });
-            }
+            const med = fmt(props.median_patch_ha);
+            const large = fmt(props.largest_patch_ha);
+            if (med || large) rows.push({ key: 'Median | Largest patch', val: [med ? med + ' ha' : '', large ? large + ' ha' : ''].filter(Boolean).join(' | ') });
             // Suitability for restoration — prefer grade split, else show report-based total
             const s12 = props.suitable_ha_grade_12, s3 = props.suitable_ha_grade_3, s45 = props.suitable_ha_grade_45;
             const sTotal = props.suitable_area_ha;
