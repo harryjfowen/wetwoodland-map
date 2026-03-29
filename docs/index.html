@@ -405,6 +405,8 @@
         let minPixelCount = 1;
         let maxPixelCount = Infinity;
         let viewMode = 'raster';  // 'hexagons' | 'polygons' | 'potential' | 'raster'
+        let hexElevationProgress = 1;  // 0 = flat, 1 = full height (animated on tab open)
+        let hexAnimFrame = null;
         let hexagonData = null;
         let polygonData = null;
         let potentialPoints = null;  // [lon, lat, value] or [lon, lat, value, landClass] for HeatmapLayer
@@ -775,6 +777,19 @@
             if (mode !== 'polygons') hidePolygonPopup();
             if (mode === 'hexagons' && deckgl) {
                 deckgl.setProps({ initialViewState: { ...INITIAL_VIEW_STATE, transitionDuration: 800 } });
+                // Animate hexagons rising from flat
+                hexElevationProgress = 0;
+                const animStart = performance.now();
+                const animDuration = 1400;
+                function easeOutCubic(t) { return 1 - Math.pow(1 - t, 3); }
+                if (hexAnimFrame) cancelAnimationFrame(hexAnimFrame);
+                function animStep() {
+                    const t = Math.min((performance.now() - animStart) / animDuration, 1);
+                    hexElevationProgress = easeOutCubic(t);
+                    updateLayers();
+                    if (t < 1) hexAnimFrame = requestAnimationFrame(animStep);
+                }
+                hexAnimFrame = requestAnimationFrame(animStep);
             }
             if (mode === 'raster' && deckgl && !hasFocusedRasterView) {
                 currentZoom = DEVON_RASTER_VIEW_STATE.zoom;
@@ -798,8 +813,9 @@
                     extruded: true,
                     wireframe: false,
                     material: { ambient: 0.5, diffuse: 0.65, shininess: 12, specularColor: [30, 30, 30] },
-                    getElevation: f => Math.pow(f.properties.count, heightExponent) * 10,
+                    getElevation: f => Math.pow(f.properties.count, heightExponent) * 10 * hexElevationProgress,
                     getFillColor: f => interpolateColorRange(f.properties.count, minCount, maxCount, HEX_COLOR_RANGE, 220, 'log'),
+                    updateTriggers: { getElevation: [heightExponent, hexElevationProgress] },
                     pickable: true,
                     autoHighlight: true,
                     highlightColor: [255, 255, 255, 100]
