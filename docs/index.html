@@ -266,10 +266,10 @@
     <div id="loading">Loading wet woodland data...</div>
 
     <div id="view-toggle">
-        <button type="button" id="btn-hexagons" class="active">Density</button>
+        <button type="button" id="btn-raster" class="active">Extent Map</button>
+        <button type="button" id="btn-hexagons">Density</button>
         <button type="button" id="btn-polygons">LNRS Regions</button>
-        <button type="button" id="btn-potential">Potential</button>
-        <button type="button" id="btn-raster">High Res Extent</button>
+        <button type="button" id="btn-potential">Suitability</button>
     </div>
 
     <div id="controls">
@@ -306,7 +306,7 @@
 
     <div id="info">
         <h2>🌲 Wet Woodland Distribution</h2>
-        <p style="margin-bottom: 12px; font-size: 12px;">Coarse 5km hexagon density view across England</p>
+        <p style="margin-bottom: 12px; font-size: 12px;">10m resolution wet woodland extent across England</p>
 
         <p style="margin: 8px 0 4px 0; font-weight: 600; font-size: 13px;">Coverage Statistics</p>
         <p style="margin: 3px 0; font-size: 12px;"><strong>Total area:</strong> 201,750 ha (2,018 km²)</p>
@@ -404,7 +404,7 @@
         let layerOpacity = 0.5;
         let minPixelCount = 1;
         let maxPixelCount = Infinity;
-        let viewMode = 'hexagons';  // 'hexagons' | 'polygons' | 'potential' | 'raster'
+        let viewMode = 'raster';  // 'hexagons' | 'polygons' | 'potential' | 'raster'
         let hexagonData = null;
         let polygonData = null;
         let potentialPoints = null;  // [lon, lat, value] or [lon, lat, value, landClass] for HeatmapLayer
@@ -768,9 +768,9 @@
             document.getElementById('btn-potential').classList.toggle('active', mode === 'potential');
             document.getElementById('btn-raster').classList.toggle('active', mode === 'raster');
             document.getElementById('controls').style.display = mode === 'hexagons' ? 'block' : 'none';
+            document.getElementById('info').style.display = (mode === 'hexagons' || mode === 'raster') ? 'block' : 'none';
             document.getElementById('legend').style.display = 'block';
             applyLegendStyle(mode);
-            document.getElementById('info').style.display = mode === 'hexagons' ? 'block' : 'none';
             if (mode === 'polygons') hidePolygonPopup();
             if (mode !== 'polygons') hidePolygonPopup();
             if (mode === 'hexagons' && deckgl) {
