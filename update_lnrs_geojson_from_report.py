@@ -107,7 +107,7 @@ def parse_potential_report(report_path: Path) -> tuple[dict[str, dict[str, Any]]
         key_name = _normalize_name(raw_name)
         by_name[key_name] = {
             "suitable_area_ha": _to_number(data.get("suitable_area_ha", "")),
-            "suitable_pct_of_valid": _to_number(data.get("suitable_pct_of_valid", "")),
+            "suitable_pct_modelled_nonurban": _to_number(data.get("suitable_pct_of_valid", "")),
             "suitable_on_peat_area_ha": _to_number(data.get("suitable_on_peat_area_ha", "")),
             "suitable_off_peat_area_ha": _to_number(data.get("suitable_off_peat_area_ha", "")),
             "suitable_under_forest_area_ha": _to_number(data.get("suitable_under_forest_area_ha", "")),

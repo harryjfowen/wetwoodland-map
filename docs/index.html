@@ -316,13 +316,14 @@
         <p style="margin: 3px 0; font-size: 12px;"><strong>Off peat:</strong> 192,272 ha (95.30%)</p>
 
         <p style="margin: 8px 0 4px 0; font-weight: 600; font-size: 13px;">Patch Distribution</p>
-        <p style="margin: 3px 0; font-size: 12px;"><strong>≤ 0.01 ha:</strong> 0.28% — 556 ha</p>
-        <p style="margin: 3px 0; font-size: 12px;"><strong>0.01-0.1 ha:</strong> 7.46% — 15,060 ha</p>
-        <p style="margin: 3px 0; font-size: 12px;"><strong>0.1-1 ha:</strong> 37.19% — 75,030 ha</p>
-        <p style="margin: 3px 0; font-size: 12px;"><strong>1-5 ha:</strong> 34.28% — 69,169 ha</p>
-        <p style="margin: 3px 0; font-size: 12px;"><strong>5-10 ha:</strong> 10.99% — 22,169 ha</p>
-        <p style="margin: 3px 0; font-size: 12px;"><strong>≥ 10 ha:</strong> 9.80% — 19,766 ha</p>
+        <p style="margin: 3px 0; font-size: 12px;"><strong>≤ 0.01 ha:</strong> 0.28% of area — 55,643 patches</p>
+        <p style="margin: 3px 0; font-size: 12px;"><strong>0.01-0.1 ha:</strong> 7.46% of area — 316,003 patches</p>
+        <p style="margin: 3px 0; font-size: 12px;"><strong>0.1-1 ha:</strong> 37.19% of area — 263,568 patches</p>
+        <p style="margin: 3px 0; font-size: 12px;"><strong>1-5 ha:</strong> 34.28% of area — 35,058 patches</p>
+        <p style="margin: 3px 0; font-size: 12px;"><strong>5-10 ha:</strong> 10.99% of area — 3,277 patches</p>
+        <p style="margin: 3px 0; font-size: 12px;"><strong>≥ 10 ha:</strong> 9.80% of area — 1,214 patches</p>
         <p style="margin: 3px 0; font-size: 12px;"><strong>Patches:</strong> 674,763 | <strong>Median:</strong> 0.08 ha | <strong>Mean:</strong> 0.30 ha</p>
+        <p style="margin: 3px 0; font-size: 12px; color: #aaa;">99.3% of patches are &lt; 5 ha by count</p>
 
         <p style="margin: 8px 0 4px 0; font-weight: 600; font-size: 13px;">Fragmentation</p>
         <p style="margin: 3px 0; font-size: 12px;"><strong>Effective Mesh Size:</strong> 3.79 ha (0.04 km²)</p>
@@ -703,7 +704,7 @@
             const sTotal = props.suitable_area_ha;
             const sOnPeat = props.suitable_on_peat_area_ha;
             const sOffPeat = props.suitable_off_peat_area_ha;
-            const sPct = props.suitable_pct_of_valid;
+            const sPct = props.suitable_pct_modelled_nonurban;
             const sThreshold = props.suitable_threshold;
             if (s12 != null || s3 != null || s45 != null || sTotal != null) {
                 rows.push({ divider: true });
@@ -715,7 +716,7 @@
                     rows.push({ key: 'Total suitable area (ha)', val: fmt(sTotal) });
                     if (fmt(sOnPeat) != null) rows.push({ key: 'Suitable on peat (ha)', val: fmt(sOnPeat) });
                     if (fmt(sOffPeat) != null) rows.push({ key: 'Suitable off peat (ha)', val: fmt(sOffPeat) });
-                    if (fmt(sPct) != null) rows.push({ key: 'Suitable % of valid', val: fmt(sPct) + '%' });
+                    if (fmt(sPct) != null) rows.push({ key: 'Suitable % of modelled non-urban land', val: fmt(sPct) + '%' });
                     if (fmt(sThreshold) != null) rows.push({ key: 'Suitability threshold', val: '≥ ' + fmt(sThreshold) });
                 }
             }
