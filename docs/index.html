@@ -780,7 +780,7 @@
                 // Animate hexagons rising from flat
                 hexElevationProgress = 0;
                 const animStart = performance.now();
-                const animDuration = 1400;
+                const animDuration = 3000;
                 function easeOutCubic(t) { return 1 - Math.pow(1 - t, 3); }
                 if (hexAnimFrame) cancelAnimationFrame(hexAnimFrame);
                 function animStep() {
