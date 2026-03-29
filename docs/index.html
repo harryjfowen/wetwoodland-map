@@ -859,12 +859,11 @@
                 minCount = counts.reduce((a, b) => Math.min(a, b), Infinity);
                 document.getElementById('loading').style.display = 'none';
 
-                hasFocusedRasterView = true;  // default tab is raster, already at Devon view
                 deckgl = new deck.DeckGL({
                     container: 'map',
                     mapLib: maplibregl,
                     mapStyle: 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json',
-                    initialViewState: DEVON_RASTER_VIEW_STATE,
+                    initialViewState: INITIAL_VIEW_STATE,
                     controller: true,
                     layers: getLayers(),
                     effects: [
@@ -1004,9 +1003,14 @@
                         document.getElementById('loading').textContent = '❌ Failed to load COG: ' + err.message;
                     }
                 });
-                // Raster is the default tab — load COG immediately
+                // Raster is the default tab — load COG then zoom to Devon
                 ensureCogLayer().then(() => {
-                    if (viewMode === 'raster') updateLayers();
+                    if (viewMode === 'raster') {
+                        currentZoom = DEVON_RASTER_VIEW_STATE.zoom;
+                        deckgl.setProps({ initialViewState: { ...DEVON_RASTER_VIEW_STATE, transitionDuration: 1200 } });
+                        hasFocusedRasterView = true;
+                        updateLayers();
+                    }
                 }).catch(err => {
                     console.error('COG load failed:', err);
                     document.getElementById('loading').textContent = '❌ Failed to load extent map: ' + err.message;
