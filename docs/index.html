@@ -791,11 +791,6 @@
                 }
                 hexAnimFrame = requestAnimationFrame(animStep);
             }
-            if (mode === 'raster' && deckgl && !hasFocusedRasterView) {
-                currentZoom = DEVON_RASTER_VIEW_STATE.zoom;
-                deckgl.setProps({ initialViewState: DEVON_RASTER_VIEW_STATE });
-                hasFocusedRasterView = true;
-            }
             updateLayers();
         }
 
@@ -1020,14 +1015,9 @@
                         document.getElementById('loading').textContent = '❌ Failed to load COG: ' + err.message;
                     }
                 });
-                // Raster is the default tab — load COG then zoom to Devon
+                // Raster is the default tab — load COG in background
                 ensureCogLayer().then(() => {
-                    if (viewMode === 'raster') {
-                        currentZoom = DEVON_RASTER_VIEW_STATE.zoom;
-                        deckgl.setProps({ initialViewState: { ...DEVON_RASTER_VIEW_STATE, transitionDuration: 1200 } });
-                        hasFocusedRasterView = true;
-                        updateLayers();
-                    }
+                    if (viewMode === 'raster') updateLayers();
                 }).catch(err => {
                     console.error('COG load failed:', err);
                     document.getElementById('loading').textContent = '❌ Failed to load extent map: ' + err.message;
