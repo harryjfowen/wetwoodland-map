@@ -15,5 +15,11 @@ venv/
 .DS_Store
 Thumbs.db
 
+# Archive
+archive/
+
+# Large raster files served from Cloudflare R2 (not needed in repo)
+docs/*.cog.bin
+
 # Output files (optional - uncomment if you don't want to track generated GeoJSON)
 # docs/*.geojson

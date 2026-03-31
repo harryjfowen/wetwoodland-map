@@ -1,165 +1,72 @@
-# Wet Woodland 3D Hexagon Visualization
+# Wet Woodland Visualization
 
-Interactive 3D visualization of wet woodland distribution across England using deck.gl and MapLibre.
+Interactive 3D visualization of wet woodland distribution across England.
 
-🌐 **Live Demo:** https://harryjfowen.github.io/wetwoodland-map/
+Live demo: https://harryjfowen.github.io/wetwoodland-map/
 
-## Overview
+## Tech Stack
 
-This project visualizes wet woodland as 3D hexagons where:
-- **Height** represents the number of wet woodland pixels within each hexagon
-- **Color** shows density with a green gradient (darker = lower, brighter = higher)
-- **Interactive** controls allow rotation, zoom, and pan
+- **deck.gl** - WebGL 3D visualization layer
+- **MapLibre GL** - Open-source basemap (CartoDB Dark Matter)
+- **Cloudflare R2** - Cloud-Optimized GeoTIFF (COG) raster hosting
+- **H3** - Hexagonal spatial indexing
+- **GeoJSON** - Vector tile data (hexagons, LNRS regions, points)
 
-## Data
+## Four Views
 
-- **Density (hexagons):** `data/wetwoodland_extent.tif` — current wet woodland extent raster; band 1 is the binary extent surface used to derive hexbins.
-- **Potential (suitability):** `data/wet_woodland_potential.tif` (100m) for the Potential tab and tiles (visual). Use `data/wet_woodland_potential_10m.tif` only for **LNRS suitability-by-grade stats** (finer resolution).
-- **CRS:** OSGB36 / British National Grid (EPSG:27700)
+- **Extent Map** - 10m probability raster via Cloud-Optimized GeoTIFF hosted on Cloudflare R2
+- **Density** - 3D H3 hexagons colored by wet woodland pixel count
+- **LNRS Regions** - Polygon statistics: extent, peat distribution, suitability by land grade
+- **Restoration Potential** - Sampled suitability points (0–1 scale), color-coded by land grade
 
-## Setup
+## Data Pipeline
 
-### Prerequisites
+Source data is processed into web-ready formats using Python scripts in `pipeline/`:
 
-```bash
-pip install h3 numpy rasterio tqdm
-```
+- `raster_to_hexagons.py` - Convert raster to H3 hexagon GeoJSON
+- `raster_potential_to_points.py` - Sample suitability raster to point features
+- `raster_potential_to_tiles.py` - Generate tile pyramid for zoom-dependent raster rendering
+- `make_cog.py` - Build Cloud-Optimized GeoTIFF for R2 hosting
+- `lnrs_suitability_stats.py` - Compute suitability by land grade per LNRS region
+- `update_lnrs_geojson_from_report.py` - Refresh LNRS region totals from report files
+- `extract_summary_from_report.py` - Parse extent and suitability statistics
+- `landvalue_to_raster.py` - Rasterize land value polygons to match suitability grid
 
-### Generate Hexagon Data
-
-Run the conversion script to derive hexbins from the wet woodland extent raster:
-
-```bash
-python raster_to_hexagons.py \
-  --raster data/wetwoodland_extent.tif \
-  --output docs/wet_woodland_hexagons.geojson \
-  --resolution 8
-```
-
-**H3 Resolution Options:**
-- `7` = ~5km hexagon edge (fewer, larger hexagons - faster)
-- `8` = ~1.2km hexagon edge (balanced - **recommended**)
-- `9` = ~500m hexagon edge (more detail, larger file)
-
-### Potential layer (restoration suitability 0–1)
-
-The live **Potential** tab reads sampled point files from `docs/potential_points.bin` (preferred) or `docs/potential_points.json` (fallback). **Suitability stats** in the LNRS popup use **10m** when you run the stats pipeline below.
-
-To refresh the Potential tab and keep the `1–2 | 3 | 4–5` land-grade toggle:
-
-1. Place your GeoTIFF as `data/wet_woodland_potential.tif` (100m) for the map.
-2. Ensure the aligned 100m land-value raster exists as `data/landvalue_classes.tif`.
-3. Generate both the binary primary file and JSON fallback:
-
-```bash
-python raster_potential_to_points.py \
-  --raster data/wet_woodland_potential.tif \
-  --landvalue data/landvalue_classes.tif \
-  --output docs/potential_points.bin \
-  --binary
-
-python raster_potential_to_points.py \
-  --raster data/wet_woodland_potential.tif \
-  --landvalue data/landvalue_classes.tif \
-  --output docs/potential_points.json
-```
-
-If you omit `--landvalue`, the Potential tab still renders but the land-grade toggle is hidden because the class channel is missing from the sampled points.
-
-### LNRS suitability stats (10m)
-
-The **map** uses the 100m suitability raster for the Potential tab. The **LNRS region popup** “Suitability for restoration” (ha by land grade) is computed from a **10m** points file for finer stats. To generate it:
-
-1. Place the 10m suitability raster as `data/wet_woodland_potential_10m.tif`.
-2. Rasterize land value to the 10m grid and sample 10m points with land class:
-
-```bash
-python landvalue_to_raster.py --potential-raster data/wet_woodland_potential_10m.tif --output data/landvalue_classes_10m.tif
-python raster_potential_to_points.py --raster data/wet_woodland_potential_10m.tif --landvalue data/landvalue_classes_10m.tif --output docs/potential_points_stats.bin --binary
-```
-
-3. Update LNRS regions with suitability-by-grade (script uses `potential_points_stats.bin` when present):
-
-```bash
-python lnrs_suitability_stats.py
-```
-
-### Refreshing LNRS region data (patch distribution, peat, etc.)
-
-The LNRS stats in the Regions tab (patch distribution, on/off peat, effective mesh size, etc.) come from **`data/wet_woodland_lnrs_regions.gpkg`**, which is produced by your external pipeline (not this repo). After you refresh that GPKG:
-
-1. Export to GeoJSON for the web app:
-   ```bash
-   ogr2ogr -f GeoJSON docs/wet_woodland_lnrs_regions.geojson data/wet_woodland_lnrs_regions.gpkg
-   ```
-2. Update LNRS per-region extent and suitability totals from report files:
-   ```bash
-   python update_lnrs_geojson_from_report.py
-   ```
-   This pulls:
-   - Extent from `data/wetwoodland_stats.txt` by default (or `--extent-report`), updating `total_area_ha`
-   - Suitability totals from `data/potential_stat_report.txt` (`suitable_area_ha`, peat/forest splits, etc.)
-3. Optionally refresh suitability-by-grade fields (`suitable_ha_grade_12/3/45`) using the 10m points workflow above.
-
-## Local Testing
-
-Test the visualization locally:
+## Local Development
 
 ```bash
 cd docs
 python3 -m http.server 8000
 ```
 
-Open http://localhost:8000 in your browser.
+Visit http://localhost:8000
 
-## GitHub Pages Deployment
+## Deployment
 
-The visualization is automatically hosted via GitHub Pages from the `/docs` folder.
+The app is hosted on GitHub Pages from the `/docs` folder. The COG raster is served from Cloudflare R2.
 
-Any changes to `docs/index.html` or `docs/*.geojson` will be reflected on the live site after pushing to GitHub.
+## Data
+
+- **Required in docs/:**
+  - `wet_woodland_hexagons.geojson` - Density layer
+  - `wet_woodland_lnrs_regions.geojson` - LNRS regions layer
+  - `potential_points.bin` or `potential_points.json` - Potential layer
+  - `wetwoodland_extent_b2.cog.bin` - Local dev copy of raster (primary served from R2)
+
+- **Required in data/:**
+  - `wet_woodland_potential.tif` - Suitability raster (100m, 0–1)
+  - `wet_woodland_lnrs_regions.gpkg` - LNRS region boundaries
+  - `landvalue_classes.tif` - Land value classification raster
 
 ## Project Structure
 
 ```
-wetwoodland-map/
-├── data/
-│   ├── wet_woodland_predictions.tif  # Source raster (Git LFS)
-│   └── wet_woodland_potential.tif     # Optional: 0–1 suitability for Potential tab
-├── docs/                              # GitHub Pages folder
-│   ├── index.html                     # Main visualization
-│   ├── wet_woodland_hexagons.geojson  # Hexagon data
-│   ├── potential.png                  # Optional: from raster_potential_to_png.py
-│   ├── potential_bounds.json         # Optional: bounds for BitmapLayer fallback
-│   └── potential_tiles/               # Optional: {z}/{x}/{y}.png from raster_potential_to_tiles.py
-├── raster_to_hexagons.py             # Hexagon conversion script
-├── raster_potential_to_png.py        # Potential raster → PNG + bounds
-├── raster_potential_to_tiles.py      # Potential raster → tile pyramid (zoom‑dependent resolution)
-└── README.md
+pipeline/              # Data processing scripts
+data/                  # Source rasters and geodata
+docs/                  # Web app (GitHub Pages)
+  ├── index.html       # Main visualization
+  ├── wet_woodland_hexagons.geojson
+  ├── wet_woodland_lnrs_regions.geojson
+  ├── potential_points.bin / .json
+  └── wetwoodland_extent_b2.cog.bin
 ```
-
-## Features
-
-- **Three views:** **Density** (3D hexagons), **LNRS Regions** (polygons with stats), **Potential** (raster of restoration suitability 0–1, same colour scale)
-- 🗺️ CartoDB Dark Matter base layer (via MapLibre - no API key required!)
-- 📦 3D hexagonal binning for spatial aggregation
-- 🎨 Shared 6-color gradient (cyan → turquoise → yellow → orange → red)
-- ⚙️ Interactive controls:
-  - Height exaggeration slider (1x to 10x)
-  - Opacity slider (0.5 to 1.0)
-  - Drag to rotate view
-  - Scroll to zoom
-  - Right-click drag to pan
-  - Hover for hexagon details
-- 💡 Professional lighting and material effects
-
-## Technology Stack
-
-- [deck.gl](https://deck.gl/) - WebGL-powered visualization
-- [MapLibre GL](https://maplibre.org/) - Open-source base maps (no API token needed)
-- [CartoDB](https://carto.com/basemaps/) - Free dark matter base map style
-- [H3](https://h3geo.org/) - Hexagonal spatial indexing
-- [GDAL/Rasterio](https://rasterio.readthedocs.io/) - Geospatial data processing
-
-## License
-
-Data and visualization by Harry J F Owen.
